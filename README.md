@@ -45,6 +45,12 @@ npm run build
 `npm run dev` needs simlab-api on :8081. See
 [`docs/development.md`](docs/development.md).
 
+## The rest of the platform
+
+Two sibling repositories: **simlab-api**, the backend this talks to, and
+**autoscaler**, the service that actually makes and enacts the scaling
+decisions. `simlab-api/deploy/platform` installs all three into one namespace.
+
 ## Deployment
 
 `deploy/chart` serves the built app from nginx and proxies `/api` to
