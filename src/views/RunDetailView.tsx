@@ -6,7 +6,7 @@ import { Chart } from '../components/Chart'
 import { Tile, Tiles } from '../components/Tiles'
 import { LiveDot, StatusBadge } from '../components/StatusBadge'
 import {
-  clockTime, count, duration, executorHours, nanoseconds, percent, priorityLabel, timestamp,
+  clockTime, count, duration, executorHours, percent, priorityLabel, timestamp,
 } from '../components/format'
 import { useEventStream } from '../state/useEventStream'
 import type { Cycle, RunEvent } from '../api/types'
@@ -76,7 +76,7 @@ export function RunDetailView() {
           <h1>{run.name || run.id}</h1>
           <p className="muted">
             <Link to="/runs">Runs</Link> · <span className="mono">{run.id}</span> ·{' '}
-            {run.mode} · {nanoseconds(run.decision_interval)} cycles ·{' '}
+            {run.mode} · {duration(run.decision_interval_seconds)} cycles ·{' '}
             started {timestamp(run.started_at)}
           </p>
         </div>

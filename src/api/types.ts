@@ -44,8 +44,7 @@ export interface Run {
   status: RunStatus
   simulated_start?: string
   time_compression?: number
-  /** Nanoseconds, as Go renders a duration. */
-  decision_interval: number
+  decision_interval_seconds: number
   started_at?: string
   finished_at?: string
   error?: string

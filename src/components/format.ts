@@ -10,11 +10,6 @@ export function duration(seconds: number): string {
   return `${(seconds / 86400).toFixed(1)}d`
 }
 
-/** Go renders a duration as nanoseconds; a person does not read those. */
-export function nanoseconds(ns: number): string {
-  return duration(ns / 1e9)
-}
-
 export function count(value: number): string {
   if (!Number.isFinite(value)) return '—'
   return value.toLocaleString()

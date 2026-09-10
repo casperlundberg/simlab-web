@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { count, duration, executorHours, nanoseconds, percent, priorityLabel } from './format'
+import { count, duration, executorHours, percent, priorityLabel } from './format'
 
 describe('formatting', () => {
   it('scales a duration to a unit a person reads', () => {
@@ -9,10 +9,6 @@ describe('formatting', () => {
     expect(duration(600)).toBe('10.0m')
     expect(duration(7200)).toBe('2.0h')
     expect(duration(360000)).toBe('4.2d')
-  })
-
-  it('turns Go’s nanoseconds into something readable', () => {
-    expect(nanoseconds(15e9)).toBe('15s')
   })
 
   it('says nothing rather than NaN for a missing value', () => {

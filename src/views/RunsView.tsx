@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../api/client'
 import { StatusBadge } from '../components/StatusBadge'
-import { count, executorHours, nanoseconds, percent, timestamp } from '../components/format'
+import { count, duration, executorHours, percent, timestamp } from '../components/format'
 import { useEventStream } from '../state/useEventStream'
 import type { RunEvent } from '../api/types'
 
@@ -98,7 +98,7 @@ export function RunsView() {
                     id={run.id}
                     name={run.name || run.id}
                     mode={run.mode}
-                    interval={run.decision_interval}
+                    interval={run.decision_interval_seconds}
                     status={run.status}
                     active={active}
                     startedAt={run.started_at}
@@ -141,7 +141,7 @@ function RunRow({ id, name, mode, interval, status, active, startedAt, deletable
     <tr>
       <td>
         <Link to={`/runs/${id}`}>{name}</Link>
-        <div className="faint mono">{nanoseconds(interval)} cycles</div>
+        <div className="faint mono">{duration(interval)} cycles</div>
       </td>
       <td><span className={`badge ${mode === 'live' ? 'cloud' : 'local'}`}>{mode}</span></td>
       <td><StatusBadge status={status} active={active} /></td>
