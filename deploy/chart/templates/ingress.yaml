@@ -1,0 +1,37 @@
+{{- if .Values.ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "simlab-web.fullname" . }}
+  labels:
+    {{- include "simlab-web.labels" . | nindent 4 }}
+  annotations:
+    # The event stream is a long-lived response; an ingress that buffers it
+    # turns a live run into one long silence followed by everything at once.
+    nginx.ingress.kubernetes.io/proxy-buffering: "off"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "86400"
+    {{- with .Values.ingress.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  {{- if .Values.ingress.className }}
+  ingressClassName: {{ .Values.ingress.className }}
+  {{- end }}
+  {{- with .Values.ingress.tls }}
+  tls:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  rules:
+    # One host for the whole app. The SPA container proxies /api itself, so the
+    # browser sees a single origin and the API needs no CORS.
+    - host: {{ .Values.ingress.host | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "simlab-web.fullname" . }}
+                port:
+                  number: {{ .Values.service.port }}
+{{- end }}

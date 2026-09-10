@@ -1,0 +1,6 @@
+apiVersion: v2
+name: simlab-web
+description: The Simlab frontend — a single-page app for defining, launching and reading scaling runs.
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
