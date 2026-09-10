@@ -27,7 +27,7 @@ describe('the API client', () => {
     const mines = await api.mines()
 
     expect(mines).toHaveLength(1)
-    expect(mines[0].id).toBe('storhall')
+    expect(mines[0]?.id).toBe('storhall')
   })
 
   // The backend's error messages are written for a person and are almost
@@ -96,6 +96,6 @@ describe('the API client', () => {
 
     await api.scenarios('mine/../../etc')
 
-    expect(fetchMock.mock.calls[0][0]).toBe('/api/scenarios?mine_id=mine%2F..%2F..%2Fetc')
+    expect(fetchMock.mock.calls[0]?.[0]).toBe('/api/scenarios?mine_id=mine%2F..%2F..%2Fetc')
   })
 })

@@ -28,7 +28,7 @@ export interface Scenario {
   name: string
   duration_seconds: number
   job_seconds: number
-  seed?: number
+  seed?: number | undefined
   priority_mix: Record<string, number>
   bursts?: Burst[]
   description?: string

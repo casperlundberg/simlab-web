@@ -29,53 +29,61 @@ function install() {
   return FakeEventSource
 }
 
+/** The stream the hook opened. Fails loudly rather than returning undefined,
+ *  so a test that opened none says so instead of dying on a property access. */
+function opened(index = 0): FakeEventSource {
+  const source = FakeEventSource.instances[index]
+  if (!source) throw new Error(`no EventSource was opened at index ${index}`)
+  return source
+}
+
 afterEach(() => {
   vi.unstubAllGlobals()
 })
 
 describe('the event stream', () => {
   it('subscribes to one run when given an id', () => {
-    const sources = install()
+    install()
 
     renderHook(() => useEventStream('run-1', () => {}))
 
-    expect(sources.instances[0].url).toBe('/api/runs/run-1/events')
+    expect(opened().url).toBe('/api/runs/run-1/events')
   })
 
   it('subscribes to everything when given none', () => {
-    const sources = install()
+    install()
 
     renderHook(() => useEventStream(undefined, () => {}))
 
-    expect(sources.instances[0].url).toBe('/api/events')
+    expect(opened().url).toBe('/api/events')
   })
 
   it('delivers each event type', () => {
-    const sources = install()
+    install()
     const seen: RunEvent[] = []
     renderHook(() => useEventStream('run-1', (event) => seen.push(event)))
 
     act(() => {
-      sources.instances[0].emit('status', { run_id: 'run-1', type: 'status', status: 'running' })
-      sources.instances[0].emit('cycle', { run_id: 'run-1', type: 'cycle' })
-      sources.instances[0].emit('metrics', { run_id: 'run-1', type: 'metrics' })
+      opened().emit('status', { run_id: 'run-1', type: 'status', status: 'running' })
+      opened().emit('cycle', { run_id: 'run-1', type: 'cycle' })
+      opened().emit('metrics', { run_id: 'run-1', type: 'metrics' })
     })
 
     expect(seen.map((e) => e.type)).toEqual(['status', 'cycle', 'metrics'])
   })
 
   it('reports whether the stream is connected', () => {
-    const sources = install()
+    install()
     const { result } = renderHook(() => useEventStream('run-1', () => {}))
 
     expect(result.current.connected).toBe(false)
     act(() => {
-      sources.instances[0].dispatchEvent(new Event('open'))
+      opened().dispatchEvent(new Event('open'))
     })
     expect(result.current.connected).toBe(true)
 
     act(() => {
-      sources.instances[0].dispatchEvent(new Event('error'))
+      opened().dispatchEvent(new Event('error'))
     })
     expect(result.current.connected).toBe(false)
   })
@@ -83,25 +91,25 @@ describe('the event stream', () => {
   // A malformed frame is not worth tearing the stream down for; a run that
   // stopped updating because of one bad byte would be far worse.
   it('survives a frame it cannot parse', () => {
-    const sources = install()
+    install()
     const seen: RunEvent[] = []
     renderHook(() => useEventStream('run-1', (event) => seen.push(event)))
 
     act(() => {
-      sources.instances[0].dispatchEvent(new MessageEvent('cycle', { data: '{not json' }))
-      sources.instances[0].emit('cycle', { run_id: 'run-1', type: 'cycle' })
+      opened().dispatchEvent(new MessageEvent('cycle', { data: '{not json' }))
+      opened().emit('cycle', { run_id: 'run-1', type: 'cycle' })
     })
 
     expect(seen).toHaveLength(1)
   })
 
   it('closes the stream when the component goes away', () => {
-    const sources = install()
+    install()
     const { unmount } = renderHook(() => useEventStream('run-1', () => {}))
 
     unmount()
 
-    expect(sources.instances[0].closed).toBe(true)
+    expect(opened().closed).toBe(true)
   })
 
   // Without this, an inline handler would rebuild the connection on every
