@@ -47,9 +47,10 @@ npm run build
 
 ## The rest of the platform
 
-Two sibling repositories: **simlab-api**, the backend this talks to, and
+Three sibling repositories: **simlab-api**, the backend this talks to;
 **autoscaler**, the service that actually makes and enacts the scaling
-decisions. `simlab-api/deploy/platform` installs all three into one namespace.
+decisions; and **platform-deploy**, which composes all three into one
+namespace and documents what they need.
 
 ## Deployment
 
