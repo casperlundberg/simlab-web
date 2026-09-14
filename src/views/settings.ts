@@ -10,7 +10,18 @@ export function numericSettings(values: Record<string, string>): Record<string, 
   const settings: Record<string, unknown> = {}
   for (const [key, raw] of Object.entries(values)) {
     if (raw === '' || raw === undefined) continue
-    settings[key] = raw === 'true' ? true : Number(raw)
+
+    if (raw === 'true' || raw === 'false') {
+      settings[key] = raw === 'true'
+      continue
+    }
+
+    // Anything that is not a number goes through as it was typed, so the
+    // backend refuses it and the user sees why. Number() would yield NaN,
+    // JSON.stringify writes NaN as null, and Go leaves a field unchanged when
+    // it reads null — so the edit would vanish behind a success.
+    const numeric = Number(raw)
+    settings[key] = Number.isFinite(numeric) ? numeric : raw
   }
   return Object.keys(settings).length ? settings : undefined
 }

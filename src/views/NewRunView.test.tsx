@@ -25,4 +25,20 @@ describe('turning a settings form into a patch', () => {
   it('keeps a fractional value intact', () => {
     expect(__test.numericSettings({ safety_factor: '1.25' })).toEqual({ safety_factor: 1.25 })
   })
+
+  // The symmetric case to 'true'. Number('false') is NaN, JSON.stringify turns
+  // NaN into null, and Go leaves a field unchanged when it reads null — so an
+  // explicit "off" would arrive as "leave it alone" and the UI would report
+  // success having changed nothing.
+  it('sends an explicit false as a boolean, not as NaN', () => {
+    expect(__test.numericSettings({ dry_run: 'false' })).toEqual({ dry_run: false })
+  })
+
+  // Same silent failure, reached from a value that is simply not a number.
+  // Passing it through unchanged makes the backend reject it, which the user
+  // sees; NaN would be swallowed.
+  it('passes a value that is not a number through, so the backend rejects it', () => {
+    expect(__test.numericSettings({ local_executor_cap: 'twelve' }))
+      .toEqual({ local_executor_cap: 'twelve' })
+  })
 })
