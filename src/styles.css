@@ -15,6 +15,9 @@
 
   --accent: #2c5fd4;
   --accent-soft: #e8effc;
+  /* Text and icons on an accent fill. A token rather than a literal white, so
+     the dark palette can move it without hunting through components. */
+  --on-accent: #ffffff;
 
   /* Tiers keep one colour each across every chart and badge in the app, so a
      reader learns them once. Local is the tier that is already paid for;
@@ -49,6 +52,7 @@
 
     --accent: #6f9bff;
     --accent-soft: #1d2740;
+    --on-accent: #10141a;
 
     --local: #4bbd82;
     --local-soft: #16281f;
@@ -149,10 +153,11 @@ button, .button {
 button:hover:not(:disabled) { border-color: var(--text-faint); }
 button:disabled { opacity: 0.5; cursor: not-allowed; }
 
-button.primary {
-  background: var(--accent); border-color: var(--accent); color: #fff;
+button.primary, .button.primary {
+  background: var(--accent); border-color: var(--accent); color: var(--on-accent);
 }
-button.primary:hover:not(:disabled) { filter: brightness(1.08); }
+button.primary:hover:not(:disabled),
+.button.primary:hover { filter: brightness(1.08); }
 button.danger { color: var(--danger); border-color: var(--danger); background: transparent; }
 button.small { padding: 4px 9px; font-size: 12px; }
 

@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, ApiError } from '../api/client'
 import { timestamp } from '../components/format'
+import { humanise, toStrings, toValues } from './TargetDetailView.internals'
 
 export function TargetDetailView() {
   const { id = '' } = useParams()
@@ -142,30 +143,4 @@ export function TargetDetailView() {
       </div>
     </>
   )
-}
-
-function toStrings(settings: Record<string, unknown>): Record<string, string> {
-  const out: Record<string, string> = {}
-  for (const [key, value] of Object.entries(settings)) {
-    if (typeof value === 'object' && value !== null) continue
-    out[key] = String(value)
-  }
-  return out
-}
-
-function toValues(draft: Record<string, string>): Record<string, unknown> {
-  const out: Record<string, unknown> = {}
-  for (const [key, raw] of Object.entries(draft)) {
-    if (raw === 'true' || raw === 'false') {
-      out[key] = raw === 'true'
-      continue
-    }
-    const numeric = Number(raw)
-    out[key] = Number.isFinite(numeric) && raw.trim() !== '' ? numeric : raw
-  }
-  return out
-}
-
-function humanise(key: string): string {
-  return key.replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase())
 }

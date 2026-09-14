@@ -60,7 +60,7 @@ export function RunsView() {
             <option value="failed">Failed</option>
             <option value="cancelled">Cancelled</option>
           </select>
-          <Link to="/runs/new" className="button primary" style={{ background: 'var(--accent)', borderColor: 'var(--accent)', color: '#fff' }}>
+          <Link to="/runs/new" className="button primary">
             New run
           </Link>
         </div>

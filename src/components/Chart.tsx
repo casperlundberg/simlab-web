@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import uPlot from 'uplot'
 import 'uplot/dist/uPlot.min.css'
+import { cssVar, withAlpha } from './theme'
 
 export interface Series {
   label: string
@@ -120,20 +121,4 @@ function formatElapsed(seconds: number): string {
   if (seconds < 90) return `${Math.round(seconds)}s`
   if (seconds < 5400) return `${(seconds / 60).toFixed(0)}m`
   return `${(seconds / 3600).toFixed(1)}h`
-}
-
-/** Reads a palette token so the chart follows the theme rather than carrying
- *  a second, divergent set of colours. */
-function cssVar(name: string): string {
-  if (typeof window === 'undefined') return '#888'
-  return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || '#888'
-}
-
-function withAlpha(colour: string, alpha: number): string {
-  if (colour.startsWith('#') && colour.length === 7) {
-    const value = Number.parseInt(colour.slice(1), 16)
-    // eslint-disable-next-line no-bitwise
-    return `rgba(${(value >> 16) & 255}, ${(value >> 8) & 255}, ${value & 255}, ${alpha})`
-  }
-  return colour
 }

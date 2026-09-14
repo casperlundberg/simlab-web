@@ -11,6 +11,7 @@ import {
 import { useEventStream } from '../state/useEventStream'
 import type { Cycle, RunEvent } from '../api/types'
 import { buildTimeline, totalDepth } from './RunDetailView.internals'
+import { cssVar } from '../components/theme'
 
 export function RunDetailView() {
   const { id = '' } = useParams()
@@ -259,9 +260,4 @@ function QueueBreakdown({ cycle }: { cycle: Cycle }) {
       ))}
     </div>
   )
-}
-
-function cssVar(name: string): string {
-  if (typeof window === 'undefined') return '#888'
-  return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || '#888'
 }
