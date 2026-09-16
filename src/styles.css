@@ -262,3 +262,49 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
   .brand { padding: 0 10px; }
   .main { padding: 16px 14px 48px; }
 }
+
+/* The token prompt. Deliberately plain: it is the first thing an operator sees
+   on a new browser, and it is asking for a credential, so it should look like
+   part of the application rather than like something that intercepted it. */
+.token-gate {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: var(--bg);
+}
+.token-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: min(420px, 100%);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 28px;
+}
+.token-card h1 { margin: 0; font-size: 20px; }
+.token-card p { margin: 0; color: var(--text-muted, #5d6874); font-size: 13px; line-height: 1.55; }
+.token-card code { font-size: 12px; }
+.token-card label { font-size: 12px; font-weight: 600; margin-top: 6px; }
+.token-card input {
+  padding: 9px 11px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+}
+.token-card button {
+  margin-top: 4px;
+  padding: 9px 14px;
+  border: 0;
+  border-radius: 6px;
+  background: var(--accent);
+  color: var(--on-accent);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.token-card button:disabled { opacity: 0.5; cursor: default; }
+.token-note { font-size: 12px; }

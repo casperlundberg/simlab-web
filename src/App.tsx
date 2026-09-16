@@ -5,9 +5,11 @@ import { NewRunView } from './views/NewRunView'
 import { TargetsView } from './views/TargetsView'
 import { TargetDetailView } from './views/TargetDetailView'
 import { WorkloadsView } from './views/WorkloadsView'
+import { TokenGate } from './components/TokenGate'
 
 export function App() {
   return (
+    <TokenGate>
     <div className="shell">
       <nav className="sidebar">
         <div className="brand">
@@ -33,6 +35,7 @@ export function App() {
         </Routes>
       </main>
     </div>
+    </TokenGate>
   )
 }
 

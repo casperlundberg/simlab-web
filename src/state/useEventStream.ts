@@ -1,3 +1,4 @@
+import { getToken } from '../api/token'
 import { useEffect, useRef, useState } from 'react'
 import type { RunEvent } from '../api/types'
 
@@ -28,7 +29,12 @@ export function useEventStream(
       return
     }
 
-    const path = runId ? `/api/runs/${runId}/events` : '/api/events'
+    // EventSource cannot set headers, so the token travels in the query
+    // string. The backend accepts it there on reads only, which is why this is
+    // safe to do and why a write can never be authorised the same way.
+    const base = runId ? `/api/runs/${runId}/events` : '/api/events'
+    const token = getToken()
+    const path = token ? `${base}?token=${encodeURIComponent(token)}` : base
     const source = new EventSource(path)
 
     const receive = (event: MessageEvent) => {

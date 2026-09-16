@@ -1,3 +1,4 @@
+import { getToken, notifyTokenRejected } from './token'
 import type {
   Cycle, Metrics, Mine, PlatformSchema, Run, RunDetail, RunListing,
   Scenario, SettingsSnapshot, TargetSnapshot, TargetStatus,
@@ -13,14 +14,22 @@ export class ApiError extends Error {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const token = getToken()
   const response = await fetch(path, {
     ...init,
     headers: {
       'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...(init?.headers ?? {}),
     },
   })
 
+  if (response.status === 401) {
+    // Tell the app before throwing, so it can ask for a token rather than
+    // render "401" at somebody who has no idea what to do about it.
+    notifyTokenRejected()
+    throw new ApiError(401, await explain(response))
+  }
   if (!response.ok) {
     throw new ApiError(response.status, await explain(response))
   }
