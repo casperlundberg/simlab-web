@@ -7,6 +7,14 @@ COPY package.json package-lock.json ./
 RUN npm ci
 
 COPY . .
+
+# Which code this bundle is. There is no .git in the build context, so CI
+# passes the version and commit in; vite.config.ts stamps them into the bundle.
+ARG VERSION=""
+ARG COMMIT=""
+ENV SIMLAB_WEB_VERSION=${VERSION} \
+    SIMLAB_WEB_COMMIT=${COMMIT}
+
 RUN npm run build
 
 FROM nginxinc/nginx-unprivileged:1.27-alpine

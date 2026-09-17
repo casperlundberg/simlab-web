@@ -468,3 +468,30 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
   .mine-grid { grid-template-columns: minmax(0, 1fr); }
   .mine-stage { height: clamp(320px, 55vh, 560px); }
 }
+
+/* ---- provenance and versions ---- */
+
+.provenance .card-head { margin-bottom: 6px; }
+.provenance-facts { max-width: 520px; }
+.provenance-command { margin: 10px 0 0; display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: baseline; font-size: 13px; }
+.provenance-command code {
+  font-family: var(--mono); font-size: 12px; padding: 3px 7px;
+  background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm);
+  overflow-wrap: anywhere;
+}
+.provenance-reasons { margin: 10px 0 0; padding-left: 18px; color: var(--text-muted); font-size: 13px; }
+.provenance details { margin-top: 10px; font-size: 13px; }
+.provenance summary { cursor: pointer; color: var(--text-muted); }
+.provenance-inputs {
+  margin: 8px 0 0; padding: 10px; max-height: 360px; overflow: auto;
+  background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm);
+  font-family: var(--mono); font-size: 11px; white-space: pre;
+}
+
+.versions {
+  margin: auto 0 0; padding: 14px 10px 0; display: grid; grid-template-columns: auto minmax(0, 1fr);
+  gap: 1px 8px; font-size: 11px; color: var(--text-faint); border-top: 1px solid var(--border);
+}
+.versions dt { color: var(--text-faint); }
+.versions dd { margin: 0; font-family: var(--mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (max-width: 720px) { .versions { display: none; } }

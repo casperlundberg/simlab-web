@@ -1,7 +1,7 @@
 import { getToken, notifyTokenRejected } from './token'
 import type {
   Cycle, Entity, Layout, Metrics, Mine, PlatformSchema, Run, RunDetail, RunListing,
-  Scenario, SeismicEvent, SettingsSnapshot, TargetSnapshot, TargetStatus,
+  Scenario, SeismicEvent, SettingsSnapshot, TargetSnapshot, TargetStatus, Versions,
 } from './types'
 
 /** An error carrying the status and the backend's own explanation, which is
@@ -54,6 +54,9 @@ function json(body: unknown): RequestInit {
 }
 
 export const api = {
+  /** Which builds the backend and its autoscaler are. */
+  versions: () => request<Versions>('/api/version'),
+
   mines: () => request<{ mines: Mine[] }>('/api/mines').then((r) => r.mines),
   saveMine: (mine: Mine) => request<Mine>('/api/mines', json(mine)),
   deleteMine: (id: string) => request<void>(`/api/mines/${id}`, { method: 'DELETE' }),

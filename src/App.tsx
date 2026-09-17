@@ -7,6 +7,7 @@ import { TargetsView } from './views/TargetsView'
 import { TargetDetailView } from './views/TargetDetailView'
 import { WorkloadsView } from './views/WorkloadsView'
 import { TokenGate } from './components/TokenGate'
+import { Versions } from './components/Versions'
 
 // Loaded only when opened: three.js is several times the size of the rest of
 // the app, and most visits never draw a mine.
@@ -25,6 +26,7 @@ export function App() {
         <NavLink to="/runs/new" className={navClass} end>New run</NavLink>
         <NavLink to="/workloads" className={navClass}>Workloads</NavLink>
         <NavLink to="/targets" className={navClass}>Targets</NavLink>
+        <Versions />
       </nav>
 
       <main className="main">

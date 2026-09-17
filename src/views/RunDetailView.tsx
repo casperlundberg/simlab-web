@@ -14,6 +14,8 @@ import {
   buildComposition, buildTimeline, sameComposition, totalDepth, type Composition,
 } from './RunDetailView.internals'
 import { cssVar, priorityToken } from '../components/theme'
+import { describeBuild, reproduceCommand } from '../components/provenance'
+import type { RunDetail } from '../api/types'
 
 export function RunDetailView() {
   const { id = '' } = useParams()
@@ -91,6 +93,8 @@ export function RunDetailView() {
         </div>
       )}
 
+      {detail.data ? <ProvenanceCard detail={detail.data} /> : null}
+
       <div className="card">
         <div className="card-head">
           <h2>Capacity</h2>
@@ -165,6 +169,55 @@ export function RunDetailView() {
         <DecisionTable cycles={cycles} />
       </div>
     </>
+  )
+}
+
+/** What produced the run and from what, and whether that is enough to
+ *  produce it again. */
+function ProvenanceCard({ detail }: { detail: RunDetail }) {
+  const provenance = detail.provenance
+  if (!provenance) {
+    return (
+      <div className="card provenance">
+        <div className="card-head"><h2>Provenance</h2></div>
+        <p className="muted">
+          Recorded before runs carried their provenance, so it cannot be traced to the code
+          that produced it or replayed from what it was given.
+        </p>
+      </div>
+    )
+  }
+  return (
+    <div className="card provenance">
+      <div className="card-head">
+        <h2>Provenance</h2>
+        <span className={`badge ${detail.reproducible ? 'completed' : 'cancelled'}`}>
+          {detail.reproducible ? 'reproducible' : 'not reproducible'}
+        </span>
+      </div>
+      <dl className="facts provenance-facts">
+        <dt>simlab-api</dt><dd className="mono">{describeBuild(provenance.simlab_api)}</dd>
+        <dt>autoscaler</dt><dd className="mono">{describeBuild(provenance.autoscaler)}</dd>
+        <dt>Recorded</dt><dd>{timestamp(provenance.recorded_at)}</dd>
+        {provenance.settings_version ? <><dt>Settings version</dt><dd>{provenance.settings_version}</dd></> : null}
+      </dl>
+      {detail.reproducible ? (
+        <p className="provenance-command">
+          <span className="faint">Rebuild both services at these commits and replay the run:</span>
+          <code>{reproduceCommand(detail.run.id)}</code>
+        </p>
+      ) : (
+        <ul className="provenance-reasons">
+          {(detail.not_reproducible_because ?? []).map((reason) => <li key={reason}>{reason}</li>)}
+        </ul>
+      )}
+      <details>
+        <summary>What it was given</summary>
+        <pre className="provenance-inputs">
+          {JSON.stringify({ mine: provenance.mine, scenario: provenance.scenario, settings: provenance.settings }, null, 2)}
+        </pre>
+      </details>
+    </div>
   )
 }
 

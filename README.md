@@ -74,6 +74,35 @@ Three sibling repositories: **simlab-api**, the backend this talks to;
 decisions; and **platform-deploy**, which composes all three into one
 namespace and documents what they need.
 
+## Versions
+
+Releases are [semantic versions](https://semver.org), tagged `vMAJOR.MINOR.PATCH`
+and cut with
+
+```bash
+make release VERSION=1.3.0
+```
+
+which refuses a dirty tree, a branch other than `main`, a `main` behind its
+remote, a version not above the last release, a `CHANGELOG.md` with no section
+for it, and failing checks — then tags, with the changelog section as the tag
+message, and pushes the commit and the tag together so CI stamps the image with
+the release. Between releases a build is `1.3.1-dev.N+<commit>`, and `.dirty`
+when built with uncommitted changes (`make version` prints it). The bundle carries its
+version and commit.
+
+The web app produces no results of its own, so its versions promise what an
+operator relies on:
+
+- **MAJOR** — a view or workflow is removed or changes what it shows, or it
+  needs a new MAJOR of simlab-api.
+- **MINOR** — something is added.
+- **PATCH** — a fix.
+
+The sidebar shows the version and commit of this app, simlab-api and the
+autoscaler, and each run's page shows the builds that produced it and the
+command that reproduces it.
+
 ## Deployment
 
 `deploy/chart` serves the built app from nginx and proxies `/api` to

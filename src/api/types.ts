@@ -108,6 +108,8 @@ export interface Run {
   finished_at?: string
   error?: string
   created_at: string
+  /** Absent for a run recorded before runs carried their provenance. */
+  built_with?: BuiltWith
 }
 
 export interface RunListing {
@@ -208,11 +210,49 @@ export interface Metrics {
   cycles: number
 }
 
+/** Which code a service was built from. */
+export interface Build {
+  /** A release such as 1.3.0, or a development build such as
+   *  1.3.1-dev.2+abc1234. Empty when the build was not stamped. */
+  version: string
+  commit: string
+  /** Built with changes the commit does not contain. */
+  modified: boolean
+  go_version: string
+  /** GOOS/GOARCH; absent from a backend that predates it. */
+  platform?: string
+}
+
+export interface BuiltWith {
+  simlab_api: Build
+  autoscaler: Build | null
+}
+
+/** What a run was produced by and from, recorded as it began. */
+export interface Provenance {
+  recorded_at: string
+  simlab_api: Build
+  autoscaler: Build | null
+  mine?: Mine
+  scenario?: Scenario
+  settings?: Record<string, unknown>
+  settings_version?: number
+}
+
+export interface Versions {
+  simlab_api: Build
+  autoscaler: Build | null
+  autoscaler_error?: string
+}
+
 export interface RunDetail {
   run: Run
   active: boolean
   metrics?: Metrics
   settings?: Record<string, unknown>
+  provenance?: Provenance
+  reproducible?: boolean
+  not_reproducible_because?: string[]
 }
 
 export interface PlatformField {
