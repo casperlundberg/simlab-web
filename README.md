@@ -14,6 +14,15 @@ platform credentials and no way to leak them.
 - **Run detail** — the timeline of a single run: queue depth per priority,
   local and cloud executors, and each scaling decision with the reason the
   engine gave for it.
+- **Queue by priority** — on the run detail, the waiting work stacked by
+  priority twice: as each job was submitted, and as the queue holds it now.
+  They differ only once something changes a waiting job's priority, and the
+  page says when they are identical.
+- **Virtual mine** — a run's mine in 3D, with a scrubber: the sensor array,
+  sensors with picks still waiting, where the mine located each event and
+  when, and what the autoscaler had running at that moment. It draws what the
+  mine knew; true epicentres are a separate layer, off by default. A finished
+  run opens at the moment the most events were waiting for a location.
 - **Live** — the same timeline, streaming, while a run is in flight.
 - **Targets** — the autoscaler targets Simlab knows about, and an editor for
   their runtime settings. Editing here changes the live autoscaler.
@@ -31,6 +40,15 @@ platform credentials and no way to leak them.
 - **A run whose process died reads as "interrupted", not "running".** The
   database cannot know the difference; the API says whether anything is
   actually running it, and the badge tells the truth.
+- **Priority wears one hue stepped by urgency**, darkest most urgent, because
+  it is ordered rather than a set of unrelated categories. The step follows the
+  level's value, so a level keeps its colour between runs.
+- **An event the mine has not located has no position in the scene.** Drawing
+  it anywhere would mean using the ground truth, which is exactly what the
+  mine does not have. Its sensors light up instead, and the wait is the part
+  of the picture the autoscaler is responsible for.
+- **three.js loads only with the mine view.** It is larger than the rest of the
+  app, and most visits never draw a mine.
 
 ## Running
 

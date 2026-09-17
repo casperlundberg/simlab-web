@@ -71,3 +71,80 @@ describe('the run timeline', () => {
     expect(__test.totalDepth(cycle({ queues: undefined as never }))).toBe(0)
   })
 })
+
+describe('the queue composition', () => {
+  const queues = (depths: Record<string, number>) =>
+    Object.fromEntries(Object.entries(depths).map(([level, depth]) => [
+      level, { depth, oldest_job_age_seconds: 0, arrival_rate_per_second: 0 },
+    ]))
+
+  it('counts the queue by the priority each job holds now, most urgent level first', () => {
+    const composition = __test.buildComposition([
+      cycle({ sequence: 1, queues: queues({ '25': 30, '100': 4 }), depth_by_submitted_priority: { '25': 34 } }),
+      cycle({ sequence: 2, queues: queues({ '25': 10 }), depth_by_submitted_priority: { '25': 10 } }),
+    ], 'current')
+
+    expect(composition.recorded).toBe(true)
+    expect(composition.levels).toEqual(['100', '25'])
+    // A level with nothing waiting in a cycle is zero there, not a gap: the
+    // stack underneath it has to keep its shape.
+    expect(composition.depths).toEqual({ '100': [4, 0], '25': [30, 10] })
+  })
+
+  it('counts the same queue by the priority each job was submitted at', () => {
+    const composition = __test.buildComposition([
+      cycle({ sequence: 1, queues: queues({ '25': 30, '100': 4 }), depth_by_submitted_priority: { '25': 34 } }),
+    ], 'submitted')
+
+    expect(composition.levels).toEqual(['25'])
+    expect(composition.depths).toEqual({ '25': [34] })
+  })
+
+  // Numerically, a level that is compared as a string puts "25" above "100".
+  it('orders levels by number, not as text', () => {
+    const composition = __test.buildComposition([
+      cycle({ queues: queues({ '25': 1, '400': 1, '100': 1, '50': 1 }) }),
+    ], 'current')
+
+    expect(composition.levels).toEqual(['400', '100', '50', '25'])
+  })
+
+  // A level that only ever reported an arrival rate has nothing to draw, and a
+  // legend entry for it would describe an empty band.
+  it('leaves out a level that never had anything waiting', () => {
+    const composition = __test.buildComposition([
+      cycle({ queues: queues({ '100': 0, '25': 3 }) }),
+    ], 'current')
+
+    expect(composition.levels).toEqual(['25'])
+  })
+
+  // Runs recorded before submitted priority was tracked would otherwise draw
+  // an empty chart, which reads as "nothing was ever waiting".
+  it('says when a run never recorded the submitted count', () => {
+    const nulled = cycle({ queues: queues({ '25': 3 }), depth_by_submitted_priority: null })
+    // Absent entirely: what a backend that predates the field sends.
+    const absent = cycle({ queues: queues({ '25': 3 }) })
+    delete absent.depth_by_submitted_priority
+
+    for (const old of [nulled, absent]) {
+      expect(__test.buildComposition([old], 'submitted').recorded).toBe(false)
+    }
+  })
+
+  it('stacks layers from the bottom up', () => {
+    expect(__test.stack([[1, 2], [10, 0], [100, 5]])).toEqual([[1, 2], [11, 2], [111, 7]])
+  })
+
+  // The two charts differ only once something changes a priority after
+  // submission. Saying so is more useful than two identical pictures.
+  it('tells whether the two counts ever differ', () => {
+    const same = [cycle({ queues: queues({ '25': 3 }), depth_by_submitted_priority: { '25': 3 } })]
+    const moved = [cycle({ queues: queues({ '25': 2, '100': 1 }), depth_by_submitted_priority: { '25': 3 } })]
+
+    expect(__test.sameComposition(
+      __test.buildComposition(same, 'current'), __test.buildComposition(same, 'submitted'))).toBe(true)
+    expect(__test.sameComposition(
+      __test.buildComposition(moved, 'current'), __test.buildComposition(moved, 'submitted'))).toBe(false)
+  })
+})

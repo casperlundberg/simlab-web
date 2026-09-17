@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../api/client'
@@ -8,15 +8,16 @@ import { LiveDot, StatusBadge } from '../components/StatusBadge'
 import {
   clockTime, count, duration, executorHours, percent, priorityLabel, timestamp,
 } from '../components/format'
-import { useEventStream } from '../state/useEventStream'
-import type { Cycle, RunEvent } from '../api/types'
-import { buildTimeline, totalDepth } from './RunDetailView.internals'
-import { cssVar } from '../components/theme'
+import { useRunCycles } from '../state/useRunCycles'
+import type { Cycle } from '../api/types'
+import {
+  buildComposition, buildTimeline, sameComposition, totalDepth, type Composition,
+} from './RunDetailView.internals'
+import { cssVar, priorityToken } from '../components/theme'
 
 export function RunDetailView() {
   const { id = '' } = useParams()
   const queryClient = useQueryClient()
-  const [cycles, setCycles] = useState<Cycle[]>([])
 
   const detail = useQuery({
     queryKey: ['run', id],
@@ -24,38 +25,7 @@ export function RunDetailView() {
     refetchInterval: (query) => (query.state.data?.active ? 10_000 : false),
   })
 
-  // The timeline is fetched once and then followed by the stream. A run of a
-  // few thousand cycles is far too much to refetch on every event.
-  useQuery({
-    queryKey: ['cycles', id],
-    queryFn: async () => {
-      const page = await api.cycles(id, 0)
-      setCycles(page.cycles)
-      return page
-    },
-  })
-
-  const onEvent = useCallback(
-    (event: RunEvent) => {
-      if (event.type === 'cycle' && event.cycle) {
-        const arriving = event.cycle
-        setCycles((existing) => {
-          // The stream can repeat or skip; the sequence number is the
-          // authority, so an out-of-order frame cannot corrupt the timeline.
-          const last = existing[existing.length - 1]
-          if (last && arriving.sequence <= last.sequence) {
-            return existing
-          }
-          return [...existing, arriving]
-        })
-      }
-      if (event.type === 'status' || event.type === 'metrics') {
-        void queryClient.invalidateQueries({ queryKey: ['run', id] })
-      }
-    },
-    [id, queryClient],
-  )
-  const { connected } = useEventStream(id, onEvent, detail.data?.active ?? true)
+  const { cycles, connected } = useRunCycles(id, detail.data?.active ?? true)
 
   const cancel = useMutation({
     mutationFn: () => api.cancelRun(id),
@@ -63,6 +33,8 @@ export function RunDetailView() {
   })
 
   const timeline = useMemo(() => buildTimeline(cycles), [cycles])
+  const submitted = useMemo(() => buildComposition(cycles, 'submitted'), [cycles])
+  const current = useMemo(() => buildComposition(cycles, 'current'), [cycles])
   const run = detail.data?.run
   const metrics = detail.data?.metrics
 
@@ -82,6 +54,9 @@ export function RunDetailView() {
           </p>
         </div>
         <div className="row">
+          {run.mode === 'simulation' ? (
+            <Link className="button" to={`/runs/${run.id}/mine`}>Virtual mine</Link>
+          ) : null}
           <StatusBadge status={run.status} active={detail.data?.active} />
           {detail.data?.active ? <LiveDot connected={connected} /> : null}
           {detail.data?.active ? (
@@ -156,6 +131,32 @@ export function RunDetailView() {
 
       <div className="card">
         <div className="card-head">
+          <h2>Queue by priority</h2>
+          <span className="faint">The same waiting work, counted two ways</span>
+        </div>
+        <CompositionChart
+          title="As submitted"
+          explanation="Each job counted at the priority the mine gave it."
+          composition={submitted}
+          elapsed={timeline.elapsed}
+        />
+        <CompositionChart
+          title="As the queue holds it"
+          explanation="Each job counted at the priority it has now, which is the order it will be served in."
+          composition={current}
+          elapsed={timeline.elapsed}
+        />
+        {submitted.recorded && cycles.length > 0 ? (
+          <p className="faint chart-note">
+            {sameComposition(submitted, current)
+              ? 'Identical: nothing changed the priority of a waiting job in this run.'
+              : 'They differ where a waiting job\'s priority was changed after it was submitted.'}
+          </p>
+        ) : null}
+      </div>
+
+      <div className="card">
+        <div className="card-head">
           <h2>Decisions</h2>
           <span className="faint">
             Every cycle, with the reasoning the engine gave for it
@@ -164,6 +165,40 @@ export function RunDetailView() {
         <DecisionTable cycles={cycles} />
       </div>
     </>
+  )
+}
+
+function CompositionChart({ title, explanation, composition, elapsed }: {
+  title: string
+  explanation: string
+  composition: Composition
+  elapsed: number[]
+}) {
+  return (
+    <section className="composition">
+      <h3>{title}</h3>
+      <p className="faint">{explanation}</p>
+      {!composition.recorded ? (
+        <div className="empty">
+          This run was recorded before the queue was counted by submitted priority.
+          Run the scenario again to see it.
+        </div>
+      ) : composition.levels.length === 0 ? (
+        <div className="empty">Nothing was ever waiting.</div>
+      ) : (
+        <Chart
+          x={elapsed}
+          height={180}
+          yLabel="jobs"
+          stacked
+          series={composition.levels.map((level) => ({
+            label: priorityLabel(level),
+            values: composition.depths[level] ?? [],
+            colour: cssVar(priorityToken(level)),
+          }))}
+        />
+      )}
+    </section>
   )
 }
 

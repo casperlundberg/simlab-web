@@ -36,7 +36,9 @@ rounding to "0%" would hide exactly what a run was measuring.
 **Logic that decides what a chart shows gets extracted and tested.** A chart
 that is subtly wrong is very hard to catch by looking at it, so
 `RunDetailView.internals.ts` holds the timeline arithmetic and has tests of
-its own. The same goes for turning a form into a settings patch: a blank field
+its own, and `MineView.internals.ts` decides what the 3D scene draws at a
+moment — which is even harder to check by eye. `MineScene.tsx` only draws
+what it is handed; if a scene needs a decision, it belongs in the internals. The same goes for turning a form into a settings patch: a blank field
 must be dropped, not sent as zero, or every run would silently disable the
 cloud tier.
 
@@ -47,7 +49,13 @@ the call site rather than relaxing the setting.
 **The stream is not the record.** The backend drops events for a watcher that
 has fallen behind rather than slowing a run down, and browsers reconnect an
 EventSource on their own. Anything that must be complete is refetched from the
-API; the stream only makes it arrive sooner.
+API; the stream only makes it arrive sooner. `state/useRunCycles.ts` is how a
+view gets a run's timeline: it reads every page, and goes back to the API
+whenever the stream skips a cycle, reconnects, or the run ends.
+
+**The 3D scene renders on demand**, when its data changes or the camera
+moves, not in a loop. A drag that ends over an event rotates the camera and
+does not select it; `isClick` is the test of which one happened.
 
 ## Adding a view
 

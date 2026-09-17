@@ -27,6 +27,29 @@
   --cloud: #8a4fbd;
   --cloud-soft: #f0e8f8;
 
+  /* Priority levels are ordered, so they wear one hue stepped by urgency:
+     --priority-1 is the most urgent and the darkest. Blue, because these
+     charts break down the queue, and the queue is already the accent colour.
+     Validated as an ordinal ramp (monotone lightness, visible steps, the
+     lightest still clear of the surface) in both palettes. */
+  --priority-1: #104281;
+  --priority-2: #1c5cab;
+  --priority-3: #2a78d6;
+  --priority-4: #5598e7;
+  --priority-5: #86b6ef;
+
+  /* The virtual mine. Estimates and sensors with work waiting take the first
+     two slots of a validated categorical palette, which stay distinct from
+     each other under colour-vision deficiency. The true epicentre is neutral
+     ink with its own shape: it is a debug layer, not a third category. */
+  --mine-rock: #b5bdc7;
+  --mine-level: #e1e5ea;
+  --mine-sensor: #7b8593;
+  --mine-busy: #eb6834;
+  --mine-estimate: #2a78d6;
+  --mine-truth: #16191d;
+  --mine-selected: #16191d;
+
   --danger: #c0392b;
   --danger-soft: #fbeae8;
   --warn: #b7791f;
@@ -58,6 +81,22 @@
     --local-soft: #16281f;
     --cloud: #b184e0;
     --cloud-soft: #241c33;
+
+    /* Flipped for a dark surface: the most urgent is the lightest, so it
+       still reads as the strongest band. */
+    --priority-1: #b7d3f6;
+    --priority-2: #86b6ef;
+    --priority-3: #5598e7;
+    --priority-4: #2a78d6;
+    --priority-5: #1c5cab;
+
+    --mine-rock: #4a5360;
+    --mine-level: #2b3139;
+    --mine-sensor: #8a94a2;
+    --mine-busy: #d95926;
+    --mine-estimate: #3987e5;
+    --mine-truth: #e8ebef;
+    --mine-selected: #e8ebef;
 
     --danger: #ef6a5c;
     --danger-soft: #2e1a18;
@@ -235,6 +274,21 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 .chart-legend { display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 8px; font-size: 12px; color: var(--text-muted); }
 .chart-legend span { display: inline-flex; align-items: center; gap: 5px; }
 .swatch { width: 11px; height: 3px; border-radius: 2px; display: inline-block; }
+.swatch.block { height: 9px; }
+
+.chart-tooltip {
+  position: absolute; z-index: 2; pointer-events: none;
+  min-width: 140px; padding: 7px 9px;
+  background: var(--surface-raised); color: var(--text);
+  border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
+  font-size: 12px; line-height: 1.5; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+}
+.chart-tooltip .at { color: var(--text-faint); margin-bottom: 2px; }
+.chart-tooltip .row { display: flex; gap: 6px; align-items: center; }
+.chart-tooltip .row .value { margin-left: auto; font-variant-numeric: tabular-nums; }
+.chart-note { margin-top: 6px; }
+.composition + .composition { margin-top: 18px; }
+.composition p { margin: 2px 0 8px; font-size: 12px; }
 
 /* ---- misc ---- */
 
@@ -308,3 +362,85 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 }
 .token-card button:disabled { opacity: 0.5; cursor: default; }
 .token-note { font-size: 12px; }
+
+/* ---- virtual mine ---- */
+
+.mine-grid {
+  display: grid; gap: 14px; align-items: start;
+  grid-template-columns: minmax(0, 1fr) 300px;
+}
+.mine-stage {
+  position: relative; padding: 0; overflow: hidden;
+  height: clamp(380px, 64vh, 780px);
+}
+.mine-canvas, .mine-canvas canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+.mine-canvas canvas { touch-action: none; cursor: grab; }
+.mine-canvas canvas:active { cursor: grabbing; }
+.mine-labels { position: absolute; inset: 0; pointer-events: none; }
+.mine-label { font-size: 11px; color: var(--text-faint); white-space: nowrap; transform: translate(-110%, 0); }
+.mine-label.north { color: var(--text-muted); font-weight: 600; transform: none; }
+.mine-unavailable { position: absolute; inset: 0; display: grid; place-items: center; }
+
+.mine-toolbar {
+  position: absolute; top: 10px; right: 10px; z-index: 1;
+  display: flex; gap: 14px; flex-wrap: wrap; justify-content: flex-end;
+  padding: 6px 10px; font-size: 12px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm);
+}
+.mine-toolbar input[type="checkbox"] { width: auto; }
+.mine-toolbar select { width: auto; padding: 2px 6px; font-size: 12px; }
+.mine-toolbar .row { gap: 6px; }
+
+.mine-legend {
+  position: absolute; left: 10px; bottom: 10px; z-index: 1; margin: 0;
+  list-style: none; padding: 6px 10px; font-size: 12px; color: var(--text-muted);
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm);
+}
+.mine-legend li { display: flex; align-items: center; gap: 7px; }
+
+.dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; flex: none; margin-right: 6px; vertical-align: middle; }
+.mine-legend .dot { margin-right: 0; }
+.dot.sensor { background: var(--mine-sensor); width: 6px; height: 6px; }
+.dot.busy { background: var(--mine-busy); }
+.dot.first { border: 1.5px dashed var(--mine-estimate); }
+.dot.final { background: var(--mine-estimate); }
+.dot.truth { border: 1.5px solid var(--mine-truth); border-radius: 1px; transform: rotate(45deg) scale(0.8); }
+
+.mine-hud { display: grid; gap: 14px; }
+.mine-hud .card + .card { margin-top: 0; }
+.mine-hud h3 { margin-bottom: 8px; }
+.mine-clock { font-size: 22px; font-weight: 600; margin-bottom: 12px; font-variant-numeric: tabular-nums; }
+.mine-clock .mono { font-size: inherit; }
+.mine-clock .faint { font-size: 13px; font-weight: 400; }
+.mine-hint { margin: 0; padding: 0 4px; font-size: 12px; }
+.mine-reason { margin: 10px 0 0; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
+
+.facts { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 3px 12px; margin: 8px 0 0; font-size: 13px; }
+.facts dt { color: var(--text-muted); white-space: nowrap; }
+.facts dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
+.facts .indent { padding-left: 12px; }
+.facts .attention { color: var(--text); font-weight: 600; }
+
+.tier + .tier { margin-top: 8px; }
+.tier-head { gap: 8px; font-size: 13px; }
+.tier-bar { position: relative; height: 8px; margin-top: 3px; border-radius: 4px; background: var(--bg); }
+.tier-bar span { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 4px; }
+.tier-bar.local .ready { background: var(--local); }
+.tier-bar.cloud .ready { background: var(--cloud); }
+.tier-bar.local .planned { border: 1.5px dashed var(--local); }
+.tier-bar.cloud .planned { border: 1.5px dashed var(--cloud); }
+
+.scrubber { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-top: 14px; }
+.scrubber input[type="range"] { flex: 1; min-width: 180px; padding: 0; accent-color: var(--accent); }
+.scrubber select { width: auto; }
+.scrubber input[type="checkbox"] { width: auto; }
+
+.visually-hidden {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+
+@media (max-width: 960px) {
+  .mine-grid { grid-template-columns: minmax(0, 1fr); }
+  .mine-stage { height: clamp(320px, 55vh, 560px); }
+}

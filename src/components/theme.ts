@@ -41,3 +41,20 @@ export function withAlpha(colour: string, alpha: number): string {
   }
   return colour
 }
+
+/** The palette token a priority level wears.
+ *
+ *  Priority is ordered, so it is one hue stepped by urgency — `--priority-1`
+ *  the most urgent — rather than a distinct colour per level. The step is
+ *  chosen by the level's value, not by its rank among the levels one run
+ *  happens to have: rank would give the same level a different colour in two
+ *  runs that are being compared side by side.
+ */
+export function priorityToken(priority: string): string {
+  const level = Number(priority)
+  if (level >= 400) return '--priority-1'
+  if (level >= 100) return '--priority-2'
+  if (level >= 50) return '--priority-3'
+  if (level >= 25) return '--priority-4'
+  return '--priority-5'
+}

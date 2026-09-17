@@ -1,4 +1,5 @@
 import type { Cycle } from '../api/types'
+import { stack } from '../components/stack'
 
 /**
  * The timeline arithmetic behind the run charts.
@@ -58,4 +59,63 @@ export function buildTimeline(cycles: Cycle[]): Timeline {
   return timeline
 }
 
-export const __test = { buildTimeline, totalDepth }
+/** Which count of the queue a composition is: by the priority each job
+ *  holds now, or by the priority it was submitted at. */
+export type Basis = 'current' | 'submitted'
+
+export interface Composition {
+  /** False when some cycle did not record this count — a run recorded before
+   *  submitted priority was tracked. Its chart would otherwise be empty, and an
+   *  empty chart reads as a queue that never had anything in it. */
+  recorded: boolean
+  /** Levels that ever had work waiting, most urgent first. */
+  levels: string[]
+  /** Depth per level, one entry per cycle, aligned with the timeline. */
+  depths: Record<string, number[]>
+}
+
+function depthsOf(cycle: Cycle, basis: Basis): Record<string, number> | null {
+  if (basis === 'submitted') return cycle.depth_by_submitted_priority ?? null
+  return Object.fromEntries(
+    Object.entries(cycle.queues ?? {}).map(([level, snapshot]) => [level, snapshot.depth]),
+  )
+}
+
+/**
+ * The waiting work at each cycle, broken down by priority level.
+ *
+ * Levels are ordered numerically: as text, "25" sorts above "100", and the
+ * stack would put the least urgent work at the bottom where the most urgent
+ * belongs. A level missing from a cycle is zero there rather than a gap,
+ * because every layer above it is drawn on top of it.
+ */
+export function buildComposition(cycles: Cycle[], basis: Basis): Composition {
+  const perCycle = cycles.map((cycle) => depthsOf(cycle, basis))
+  const recorded = perCycle.every((depths) => depths !== null)
+
+  const seen = new Set<string>()
+  for (const depths of perCycle) {
+    for (const [level, depth] of Object.entries(depths ?? {})) {
+      if (depth > 0) seen.add(level)
+    }
+  }
+  const levels = [...seen].sort((a, b) => Number(b) - Number(a))
+
+  const depths: Record<string, number[]> = {}
+  for (const level of levels) {
+    depths[level] = perCycle.map((cycleDepths) => cycleDepths?.[level] ?? 0)
+  }
+  return { recorded, levels, depths }
+}
+
+/** Whether two compositions describe the queue identically. */
+export function sameComposition(a: Composition, b: Composition): boolean {
+  if (a.levels.join('|') !== b.levels.join('|')) return false
+  return a.levels.every((level) => {
+    const left = a.depths[level] ?? []
+    const right = b.depths[level] ?? []
+    return left.length === right.length && left.every((value, i) => value === right[i])
+  })
+}
+
+export const __test = { buildTimeline, totalDepth, buildComposition, stack, sameComposition }

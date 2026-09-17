@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { UNRESOLVED, cssVar, withAlpha } from './theme'
+import { UNRESOLVED, cssVar, priorityToken, withAlpha } from './theme'
 
 // This is the one place a component is allowed to know what a palette token
 // resolves to, because a canvas has to be handed real colour strings. It
@@ -63,5 +63,29 @@ describe('fading a colour for an area fill', () => {
 
   it('leaves the fallback grey alone if it ever reaches a fill', () => {
     expect(withAlpha(UNRESOLVED, 0.15)).toBe('rgba(136, 136, 136, 0.15)')
+  })
+})
+
+describe('the colour a priority level wears', () => {
+  // Priority is ordered, so it wears one hue stepped by urgency rather than a
+  // colour per level: a reader should see which band is most urgent without a
+  // legend.
+  it('steps by urgency', () => {
+    expect(priorityToken('400')).toBe('--priority-1')
+    expect(priorityToken('100')).toBe('--priority-2')
+    expect(priorityToken('50')).toBe('--priority-3')
+    expect(priorityToken('25')).toBe('--priority-4')
+    expect(priorityToken('0')).toBe('--priority-5')
+  })
+
+  // A scenario may use any levels. Colour follows the level's value, never its
+  // rank among the levels a run happens to have, or the same level would
+  // change colour between two runs.
+  it('places a level nobody named by its value', () => {
+    expect(priorityToken('250')).toBe('--priority-2')
+    expect(priorityToken('75')).toBe('--priority-3')
+    expect(priorityToken('10')).toBe('--priority-5')
+    expect(priorityToken('-5')).toBe('--priority-5')
+    expect(priorityToken('9000')).toBe('--priority-1')
   })
 })

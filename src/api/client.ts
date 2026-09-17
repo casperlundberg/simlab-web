@@ -1,7 +1,7 @@
 import { getToken, notifyTokenRejected } from './token'
 import type {
-  Cycle, Metrics, Mine, PlatformSchema, Run, RunDetail, RunListing,
-  Scenario, SettingsSnapshot, TargetSnapshot, TargetStatus,
+  Cycle, Layout, Metrics, Mine, PlatformSchema, Run, RunDetail, RunListing,
+  Scenario, SeismicEvent, SettingsSnapshot, TargetSnapshot, TargetStatus,
 } from './types'
 
 /** An error carrying the status and the backend's own explanation, which is
@@ -79,6 +79,15 @@ export const api = {
    *  timeline that is already thousands of rows. */
   cycles: (id: string, from = 0) =>
     request<{ cycles: Cycle[]; next: number }>(`/api/runs/${id}/cycles?from=${from}`),
+
+  /** The sensor array a run's virtual mine was replayed against. 404 for a
+   *  live run, or one recorded before mines were modelled. */
+  runLayout: (id: string) =>
+    request<{ layout: Layout }>(`/api/runs/${id}/layout`).then((r) => r.layout),
+
+  /** Seismic events after `from`, paged like cycles. */
+  seismicity: (id: string, from = 0) =>
+    request<{ events: SeismicEvent[]; next: number }>(`/api/runs/${id}/seismicity?from=${from}`),
 
   platforms: () =>
     request<{ platforms: PlatformSchema[] }>('/api/platforms').then((r) => r.platforms),
