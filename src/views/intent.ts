@@ -32,7 +32,7 @@ export const DEFAULT_INTENT: IntentSettings = {
   promote_to: 400,
   deadline_from: 'arrival',
   restore: true,
-  burst_exempt: [],
+  burst_exempt: ['restored'],
 }
 
 /** The form: numbers as typed, so a half-typed value is not lost to parsing. */

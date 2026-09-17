@@ -55,7 +55,7 @@ describe('turning the intent form into a patch', () => {
     expect(document.lookahead_seconds).toBe(120)
     expect(document).not.toHaveProperty('margin_m')
     expect(document.mode).toBe('decay')
-    expect(document.burst_exempt).toEqual([])
+    expect(document.burst_exempt).toEqual(['restored'])
   })
 
   it('switches list members on and off in a stable order', () => {
