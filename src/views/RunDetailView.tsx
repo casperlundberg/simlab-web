@@ -1,7 +1,7 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { api } from '../api/client'
+import { ApiError, api } from '../api/client'
 import { Chart } from '../components/Chart'
 import { Tile, Tiles } from '../components/Tiles'
 import { LiveDot, StatusBadge } from '../components/StatusBadge'
@@ -16,6 +16,8 @@ import {
 import { cssVar, priorityToken } from '../components/theme'
 import { describeBuild, reproduceCommand } from '../components/provenance'
 import type { RunDetail } from '../api/types'
+import { IntentEditor } from './IntentEditor'
+import { describeIntent, intentPatch, intentSeries, toDraft } from './intent'
 
 export function RunDetailView() {
   const { id = '' } = useParams()
@@ -37,6 +39,7 @@ export function RunDetailView() {
   const timeline = useMemo(() => buildTimeline(cycles), [cycles])
   const submitted = useMemo(() => buildComposition(cycles, 'submitted'), [cycles])
   const current = useMemo(() => buildComposition(cycles, 'current'), [cycles])
+  const intent = useMemo(() => intentSeries(cycles), [cycles])
   const run = detail.data?.run
   const metrics = detail.data?.metrics
 
@@ -79,6 +82,13 @@ export function RunDetailView() {
             unit={percent(metrics.breach_rate)}
             tone={metrics.sla_breaches === 0 ? 'good' : 'bad'}
           />
+          {metrics.sla_breaches_as_submitted !== undefined && metrics.jobs_reprioritised ? (
+            <Tile
+              label="Breaches as submitted"
+              value={count(metrics.sla_breaches_as_submitted)}
+              unit={`${count(metrics.jobs_reprioritised)} jobs moved`}
+            />
+          ) : null}
           <Tile label="Jobs completed" value={count(metrics.jobs_completed)} unit={`of ${count(metrics.jobs_submitted)}`} />
           <Tile label="Mean wait" value={duration(metrics.mean_wait_seconds)} />
           <Tile label="P95 wait" value={duration(metrics.p95_wait_seconds)} />
@@ -94,6 +104,8 @@ export function RunDetailView() {
       )}
 
       {detail.data ? <ProvenanceCard detail={detail.data} /> : null}
+
+      {run.mode === 'simulation' ? <IntentCard runId={run.id} active={detail.data?.active ?? false} /> : null}
 
       <div className="card">
         <div className="card-head">
@@ -150,6 +162,25 @@ export function RunDetailView() {
           composition={current}
           elapsed={timeline.elapsed}
         />
+        {intent.recorded ? (
+          <section className="composition">
+            <h3>What intent did</h3>
+            <p className="faint">
+              Waiting jobs below and above the priority they were submitted with, and those exempt from
+              cloud burst{intent.accepted > 0 ? ` — in ${count(intent.accepted)} cycles every breach the autoscaler predicted was of exempt work, and it accepted them` : ''}.
+            </p>
+            <Chart
+              x={timeline.elapsed}
+              height={160}
+              yLabel="jobs"
+              series={[
+                { label: 'decayed', values: intent.decayed.map((v) => v ?? 0), colour: cssVar('--intent-decayed') },
+                { label: 'promoted', values: intent.promoted.map((v) => v ?? 0), colour: cssVar('--intent-promoted') },
+                { label: 'exempt from burst', values: intent.exempt.map((v) => v ?? 0), colour: cssVar('--text-muted'), dashed: true },
+              ]}
+            />
+          </section>
+        ) : null}
         {submitted.recorded && cycles.length > 0 ? (
           <p className="faint chart-note">
             {sameComposition(submitted, current)
@@ -169,6 +200,107 @@ export function RunDetailView() {
         <DecisionTable cycles={cycles} />
       </div>
     </>
+  )
+}
+
+/**
+ * How the run's mine reorders its work: what is in force, every change and
+ * the cycle it took effect from, and — while the run is in flight — an editor
+ * whose changes take effect from the next cycle.
+ */
+function IntentCard({ runId, active }: { runId: string; active: boolean }) {
+  const queryClient = useQueryClient()
+  const intent = useQuery({
+    queryKey: ['intent', runId],
+    queryFn: () => api.runIntent(runId),
+    retry: false,
+    refetchInterval: active ? 5_000 : false,
+  })
+  const [draft, setDraft] = useState(() => (intent.data ? toDraft(intent.data.settings) : null))
+  const [conflict, setConflict] = useState<string | null>(null)
+
+  // The editor starts from what is in force and follows it when someone else
+  // changes it, or a stale form would keep proposing to undo their change.
+  useEffect(() => {
+    if (intent.data) setDraft(toDraft(intent.data.settings))
+  }, [intent.data?.version])
+
+  const save = useMutation({
+    mutationFn: () => api.patchRunIntent(runId, intentPatch(draft!, intent.data!.settings), intent.data!.version),
+    onSuccess: () => {
+      setConflict(null)
+      void queryClient.invalidateQueries({ queryKey: ['intent', runId] })
+    },
+    onError: (error) => {
+      if (error instanceof ApiError && error.status === 409) {
+        setConflict(error.message)
+        void queryClient.invalidateQueries({ queryKey: ['intent', runId] })
+      }
+    },
+  })
+
+  if (intent.error) {
+    if (intent.error instanceof ApiError && intent.error.status === 404) {
+      return (
+        <div className="card">
+          <div className="card-head"><h2>Intent</h2></div>
+          <p className="muted">Created before intent existed: nothing reordered this run's work.</p>
+        </div>
+      )
+    }
+    return <div className="error-banner">{(intent.error as Error).message}</div>
+  }
+  if (!intent.data || !draft) return null
+
+  const changes = intent.data.changes
+  const pending = changes.length > 0 && intent.data.version > changes[changes.length - 1]!.version
+  const patch = intentPatch(draft, intent.data.settings)
+
+  return (
+    <div className="card">
+      <div className="card-head">
+        <h2>Intent</h2>
+        <span className="faint">
+          version {intent.data.version}
+          {pending ? ' · waiting for the next cycle to take effect' : ''}
+        </span>
+      </div>
+      <p className="intent-summary">{describeIntent(intent.data.settings)}</p>
+
+      {changes.length ? (
+        <ul className="intent-history" aria-label="Changes of intent">
+          {changes.map((change) => (
+            <li key={change.version}>
+              <span className="faint">v{change.version} · {change.source}</span>
+              <span className="mono">from cycle {change.cycle}</span>
+              <span>{describeIntent(change.settings)}</span>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+
+      {active ? (
+        <details open={Object.keys(patch).length > 0} style={{ marginTop: 12 }}>
+          <summary>Change intent while the run is in flight</summary>
+          <p className="muted">
+            Takes effect from the next cycle, and is recorded with that cycle, so the run can still be
+            reproduced exactly.
+          </p>
+          {conflict ? (
+            <div className="warn-banner">{conflict} — the form has been reloaded with what is now in force.</div>
+          ) : null}
+          {save.error && !conflict ? <div className="error-banner">{(save.error as Error).message}</div> : null}
+          <IntentEditor draft={draft} onChange={setDraft} idPrefix={`intent-${runId}`} />
+          <button
+            className="primary"
+            onClick={() => save.mutate()}
+            disabled={save.isPending || Object.keys(patch).length === 0}
+          >
+            {save.isPending ? 'Saving…' : 'Change intent'}
+          </button>
+        </details>
+      ) : null}
+    </div>
   )
 }
 
@@ -214,7 +346,9 @@ function ProvenanceCard({ detail }: { detail: RunDetail }) {
       <details>
         <summary>What it was given</summary>
         <pre className="provenance-inputs">
-          {JSON.stringify({ mine: provenance.mine, scenario: provenance.scenario, settings: provenance.settings }, null, 2)}
+          {JSON.stringify({
+            mine: provenance.mine, scenario: provenance.scenario, settings: provenance.settings, intent: provenance.intent,
+          }, null, 2)}
         </pre>
       </details>
     </div>
@@ -316,6 +450,9 @@ function DecisionTable({ cycles }: { cycles: Cycle[] }) {
                   {totalDepth(cycle)}
                   {cycle.breached > 0 ? (
                     <div style={{ color: 'var(--danger)' }}>+{cycle.breached} late</div>
+                  ) : null}
+                  {cycle.intent?.exempt ? (
+                    <div className="faint" title="Waiting jobs exempt from cloud burst">{count(cycle.intent.exempt)} exempt</div>
                   ) : null}
                 </td>
                 <td className="reason">

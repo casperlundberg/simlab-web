@@ -59,6 +59,13 @@
   --risk-high: #ec835a;
   --risk-very-high: #d03b3b;
 
+  /* What the mine's intent did to an event's work. Categorical, validated
+     for colour-vision deficiency against the chart surface in both modes;
+     kept is the estimate blue, because kept work is what the mine located. */
+  --intent-kept: #2a78d6;
+  --intent-promoted: #c2378f;
+  --intent-decayed: #a0712b;
+
   --danger: #c0392b;
   --danger-soft: #fbeae8;
   --warn: #b7791f;
@@ -108,6 +115,10 @@
     --mine-selected: #e8ebef;
     --mine-tunnel: #5b6572;
     --mine-entity: #d6dde6;
+
+    --intent-kept: #3987e5;
+    --intent-promoted: #d6589c;
+    --intent-decayed: #a8883e;
 
     --danger: #ef6a5c;
     --danger-soft: #2e1a18;
@@ -495,3 +506,26 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 .versions dt { color: var(--text-faint); }
 .versions dd { margin: 0; font-family: var(--mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 @media (max-width: 720px) { .versions { display: none; } }
+
+/* ---- Intent ------------------------------------------------------------ */
+
+.intent-editor { border: 0; padding: 0; margin: 0; min-width: 0; }
+.intent-editor .field .label { display: block; font-weight: 500; margin-bottom: 4px; }
+/* A checkbox's own label sits beside it, not above it as a field's does. */
+.intent-editor .field label.check { display: flex; font-weight: 400; margin-bottom: 0; gap: 6px; }
+.intent-editor input[type="checkbox"] { width: auto; }
+.intent-summary { margin: 0 0 10px; }
+.intent-history { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 4px; font-size: 13px; }
+.intent-history li { display: grid; grid-template-columns: auto auto minmax(0, 1fr); gap: 12px; align-items: baseline; }
+.intent-history li > span:not(:last-child) { white-space: nowrap; }
+/* A setting the chosen mode does not use stays visible, so the whole document
+   can be read, and looks unavailable. */
+.intent-editor input:disabled, .intent-editor select:disabled { opacity: 0.5; cursor: not-allowed; }
+.intent-state { font-weight: 600; }
+.intent-state.kept { color: var(--intent-kept); }
+.intent-state.decayed { color: var(--intent-decayed); }
+.intent-state.promoted { color: var(--intent-promoted); }
+.dot.intent-kept { background: var(--intent-kept); }
+.dot.intent-decayed { background: var(--intent-decayed); }
+.dot.intent-promoted { background: var(--intent-promoted); }
+.dot.route { background: transparent; border: 2px solid var(--intent-kept); width: 9px; height: 9px; }

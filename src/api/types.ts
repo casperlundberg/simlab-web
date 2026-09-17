@@ -147,8 +147,87 @@ export interface Cycle {
   constraint?: string
   settings_version: number
   breach_expected: boolean
+  /** Every breach predicted was of work exempt from cloud burst: accepted,
+   *  not missed. Absent from a backend that predates exemption. */
+  breaches_exempt_only?: boolean
+  /** What intent had done to the queue this cycle. Null for a cycle recorded
+   *  before intent was; absent from a backend that predates it. */
+  intent?: CycleIntent | null
   completed: number
   breached: number
+}
+
+export type IntentMode = 'off' | 'decay' | 'promote' | 'both'
+export type IntentClass = 'decayed' | 'promoted' | 'restored'
+export type IntentState = 'unknown' | 'kept' | 'decayed' | 'promoted'
+
+/** How the mine reorders its queued work. */
+export interface IntentSettings {
+  mode: IntentMode
+  knowledge: 'estimate' | 'truth'
+  pre_location: boolean
+  pre_location_magnitude: number
+  protect: EntityKind[]
+  lookahead_seconds: number
+  protect_level: RiskLevel
+  promote_level: RiskLevel
+  margin_m: number
+  location_uncertainty_m: number
+  decay_to: number
+  promote_to: number
+  deadline_from: 'arrival' | 'change'
+  restore: boolean
+  burst_exempt: IntentClass[]
+}
+
+export interface IntentStep {
+  cycle: number
+  settings: Partial<IntentSettings>
+  version?: number
+  source?: string
+}
+
+/** Intent as it was from one cycle of a run onwards. */
+export interface IntentChange {
+  version: number
+  cycle: number
+  source: 'initial' | 'schedule' | 'operator'
+  settings: IntentSettings
+  recorded_at: string
+}
+
+export interface RunIntent {
+  run_id: string
+  /** Whether the run is in flight, and so whether its intent can change. */
+  active: boolean
+  /** In force now — for a run in flight, possibly a change the run has not
+   *  reached a cycle boundary to apply yet. */
+  settings: IntentSettings
+  version: number
+  schedule: IntentStep[]
+  /** Every version that took effect, with the cycle it took effect from. */
+  changes: IntentChange[]
+}
+
+/** The mine's intent changing its mind about one event's work. */
+export interface IntentTransition {
+  at_seconds: number
+  state: IntentState
+  /** location, sensors, truth, or off */
+  basis?: string
+  entity?: string
+  distance_m: number
+  reach_m: number
+}
+
+export interface CycleIntent {
+  version: number
+  decayed: number
+  promoted: number
+  exempt: number
+  exempt_by_priority?: Record<string, number>
+  changed: number
+  too_late: number
 }
 
 /** A location the mine solved from picks it had processed. */
@@ -190,6 +269,9 @@ export interface SeismicEvent {
    *  still waiting. Null as a whole for an event recorded before this was
    *  tracked, and absent from a backend that predates it. */
   picks_processed_at_seconds?: (number | null)[] | null
+  /** Every change of intent about this event's work, in order. Null for an
+   *  event recorded before intent was; absent from a backend that predates it. */
+  intent?: IntentTransition[] | null
 }
 
 export interface Metrics {
@@ -197,6 +279,10 @@ export interface Metrics {
   jobs_submitted: number
   jobs_completed: number
   sla_breaches: number
+  /** Against the level each job was submitted at, from arrival. Absent from
+   *  a backend that predates intent. */
+  sla_breaches_as_submitted?: number
+  jobs_reprioritised?: number
   breach_rate: number
   mean_wait_seconds: number
   p95_wait_seconds: number
@@ -237,6 +323,8 @@ export interface Provenance {
   scenario?: Scenario
   settings?: Record<string, unknown>
   settings_version?: number
+  /** The intent the run began with. Absent for a run that predates intent. */
+  intent?: { settings: IntentSettings; schedule?: IntentStep[] | null }
 }
 
 export interface Versions {

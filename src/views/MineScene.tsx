@@ -2,8 +2,9 @@ import { useEffect, useRef } from 'react'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import { CSS2DObject, CSS2DRenderer } from 'three/addons/renderers/CSS2DRenderer.js'
-import type { Entity, EntityKind, Layout, Point, RiskLevel } from '../api/types'
+import type { Entity, EntityKind, IntentState, Layout, Point, RiskLevel } from '../api/types'
 import type { Risk, SceneAt } from './MineView.internals'
+import type { Reach } from './intent'
 import { SCENE_SIZE, entityAt, isClick, nearestWithin, toScene } from './MineView.internals'
 import { cssVar } from '../components/theme'
 
@@ -21,6 +22,12 @@ interface Props {
   showZones: boolean
   /** Draw where events really were. The mine never knew this. */
   showTruth: boolean
+  /** What intent had decided about each event at t, by sequence. */
+  intentStates: Map<number, IntentState>
+  /** The sphere each judged event was decided with. Empty to draw none. */
+  reach: Reach[]
+  /** Where each protected entity is going over the lookahead. Empty to draw none. */
+  routes: Point[][]
   selected: number | null
   onSelect: (sequence: number | null) => void
   /** Called once if the browser cannot give this a WebGL context. */
@@ -48,7 +55,9 @@ interface Stage {
   rings: THREE.InstancedMesh
   trueRings: THREE.InstancedMesh
   zones: Record<'high' | 'very-high', THREE.InstancedMesh>
-  colours: Record<'sensor' | 'busy' | 'estimate' | 'truth' | 'surface' | 'entity' | RiskLevel, THREE.Color>
+  reach: THREE.InstancedMesh
+  routes: THREE.LineSegments
+  colours: Record<'sensor' | 'busy' | 'estimate' | 'truth' | 'surface' | 'entity' | RiskLevel | IntentState, THREE.Color>
   render: () => void
 }
 
@@ -64,7 +73,8 @@ interface Stage {
  * in a continuous loop, so a view left open in a tab costs nothing.
  */
 export function MineScene({
-  layout, scene, t, entities, risk, trueRisk, showZones, showTruth, selected, onSelect, onUnavailable, theme,
+  layout, scene, t, entities, risk, trueRisk, showZones, showTruth, intentStates, reach, routes, selected, onSelect,
+  onUnavailable, theme,
 }: Props) {
   const container = useRef<HTMLDivElement>(null)
   const stage = useRef<Stage | null>(null)
@@ -75,8 +85,9 @@ export function MineScene({
   select.current = onSelect
   const unavailable = useRef(onUnavailable)
   unavailable.current = onUnavailable
-  const latest = useRef<Drawn>({ scene, t, entities, risk, trueRisk, showZones, showTruth, selected })
-  latest.current = { scene, t, entities, risk, trueRisk, showZones, showTruth, selected }
+  const drawn: Drawn = { scene, t, entities, risk, trueRisk, showZones, showTruth, intentStates, reach, routes, selected }
+  const latest = useRef<Drawn>(drawn)
+  latest.current = drawn
 
   useEffect(() => {
     const host = container.current
@@ -128,8 +139,8 @@ export function MineScene({
   }, [layout, theme, entities])
 
   useEffect(() => {
-    if (stage.current) update(stage.current, layout, { scene, t, entities, risk, trueRisk, showZones, showTruth, selected })
-  }, [layout, scene, t, entities, risk, trueRisk, showZones, showTruth, selected])
+    if (stage.current) update(stage.current, layout, latest.current)
+  }, [layout, scene, t, entities, risk, trueRisk, showZones, showTruth, intentStates, reach, routes, selected])
 
   return <div ref={container} className="mine-canvas" />
 }
@@ -143,6 +154,9 @@ interface Drawn {
   trueRisk: Map<string, Risk> | null
   showZones: boolean
   showTruth: boolean
+  intentStates: Map<number, IntentState>
+  reach: Reach[]
+  routes: Point[][]
   selected: number | null
 }
 
@@ -197,6 +211,10 @@ function build(host: HTMLDivElement, renderer: THREE.WebGLRenderer, layout: Layo
     moderate: new THREE.Color(cssVar('--risk-moderate')),
     high: new THREE.Color(cssVar('--risk-high')),
     'very-high': new THREE.Color(cssVar('--risk-very-high')),
+    unknown: new THREE.Color(cssVar('--mine-estimate')),
+    kept: new THREE.Color(cssVar('--intent-kept')),
+    decayed: new THREE.Color(cssVar('--intent-decayed')),
+    promoted: new THREE.Color(cssVar('--intent-promoted')),
   }
 
   // Tunnels are the only lit surfaces: a flat colour makes a pipe read as a
@@ -263,9 +281,24 @@ function build(host: HTMLDivElement, renderer: THREE.WebGLRenderer, layout: Layo
     new THREE.MeshBasicMaterial({ color: new THREE.Color(cssVar(token)), transparent: true, opacity: 0.1, depthWrite: false }), 512)
   const zones = { high: shell('--risk-high'), 'very-high': shell('--risk-very-high') }
 
+  // Intent's spheres: coloured per instance by what was decided, fainter than
+  // the hazard zones so the two can be told apart where they overlap.
+  const reach = instanced(world, new THREE.SphereGeometry(1, 24, 16),
+    new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.07, depthWrite: false }), 512)
+
+  // Routes run along the tunnels, so drawn with depth they vanish inside the
+  // pipes. They are drawn over everything instead, in the protected colour.
+  const routes = new THREE.LineSegments(
+    new THREE.BufferGeometry(),
+    new THREE.LineBasicMaterial({ color: colours.kept, transparent: true, opacity: 0.9, depthTest: false }),
+  )
+  routes.renderOrder = 10
+  routes.frustumCulled = false
+  world.add(routes)
+
   const stage: Stage = {
     renderer, labels, camera, controls, world, sensors, sensorIndex,
-    first, final, truth, errors, selection, people, rings, trueRings, zones, colours,
+    first, final, truth, errors, selection, people, rings, trueRings, zones, reach, routes, colours,
     render: () => {
       renderer.render(world, camera)
       labels.render(world, camera)
@@ -372,7 +405,9 @@ function ensure(stage: Stage, which: 'first' | 'final' | 'truth', needed: number
   stage[which] = pool(stage.world, current.mesh.geometry, current.mesh.material as THREE.Material, capacity)
 }
 
-function update(stage: Stage, layout: Layout, { scene, t, entities, risk, trueRisk, showZones, showTruth, selected }: Drawn) {
+function update(stage: Stage, layout: Layout, {
+  scene, t, entities, risk, trueRisk, showZones, showTruth, intentStates, reach, routes, selected,
+}: Drawn) {
   const vector = (point: Point) => {
     const p = toScene(point, layout.extent)
     return new THREE.Vector3(p.x, p.y, p.z)
@@ -414,7 +449,10 @@ function update(stage: Stage, layout: Layout, { scene, t, entities, risk, trueRi
       place(target.mesh, i, at)
       // Fading toward the surface rather than toward transparency: instances
       // share one material, and per-instance colour is what they can vary.
-      target.mesh.setColorAt(i, colour.copy(stage.colours.estimate).lerp(stage.colours.surface, visible.age * 0.8))
+      // The colour is what intent decided, where it has decided anything.
+      const judged = intentStates.get(visible.event.sequence)
+      const base = judged ? stage.colours[judged] : stage.colours.estimate
+      target.mesh.setColorAt(i, colour.copy(base).lerp(stage.colours.surface, visible.age * 0.8))
       target.sequences.push(visible.event.sequence)
       target.positions.push(at)
       if (showTruth) lines.push(at, truthAt)
@@ -443,6 +481,7 @@ function update(stage: Stage, layout: Layout, { scene, t, entities, risk, trueRi
 
   drawPeople(stage, layout, t, entities, risk, trueRisk)
   drawZones(stage, layout, scene, showZones)
+  drawIntent(stage, layout, reach, routes)
 
   stage.render()
 }
@@ -505,6 +544,39 @@ function drawZones(stage: Stage, layout: Layout, scene: SceneAt, show: boolean) 
     }
     mesh.instanceMatrix.needsUpdate = true
   }
+}
+
+/** Intent's spheres and the protected routes they were measured against. */
+function drawIntent(stage: Stage, layout: Layout, reach: Reach[], routes: Point[][]) {
+  const { min, max } = layout.extent
+  const scale = SCENE_SIZE / Math.max(max.x - min.x, max.y - min.y, max.z - min.z, 1e-9)
+  const vector = (point: Point) => {
+    const p = toScene(point, layout.extent)
+    return new THREE.Vector3(p.x, p.y, p.z)
+  }
+
+  if (reach.length > stage.reach.instanceMatrix.count) {
+    let capacity = stage.reach.instanceMatrix.count
+    while (capacity < reach.length) capacity *= 2
+    stage.world.remove(stage.reach)
+    stage.reach.dispose()
+    stage.reach = instanced(stage.world, stage.reach.geometry, stage.reach.material as THREE.Material, capacity)
+  }
+  stage.reach.count = 0
+  for (const sphere of reach) {
+    const i = stage.reach.count++
+    place(stage.reach, i, vector(sphere.at), sphere.radius * scale)
+    stage.reach.setColorAt(i, stage.colours[sphere.state])
+  }
+  stage.reach.instanceMatrix.needsUpdate = true
+  if (stage.reach.instanceColor) stage.reach.instanceColor.needsUpdate = true
+
+  const segments: THREE.Vector3[] = []
+  for (const route of routes) {
+    for (let i = 1; i < route.length; i++) segments.push(vector(route[i - 1]!), vector(route[i]!))
+  }
+  stage.routes.geometry.dispose()
+  stage.routes.geometry = new THREE.BufferGeometry().setFromPoints(segments)
 }
 
 /** The event under a click, or null for empty space.

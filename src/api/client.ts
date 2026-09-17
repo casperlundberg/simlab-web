@@ -1,6 +1,6 @@
 import { getToken, notifyTokenRejected } from './token'
 import type {
-  Cycle, Entity, Layout, Metrics, Mine, PlatformSchema, Run, RunDetail, RunListing,
+  Cycle, Entity, IntentSettings, Layout, Metrics, Mine, PlatformSchema, Run, RunDetail, RunIntent, RunListing,
   Scenario, SeismicEvent, SettingsSnapshot, TargetSnapshot, TargetStatus, Versions,
 } from './types'
 
@@ -91,6 +91,20 @@ export const api = {
   /** Seismic events after `from`, paged like cycles. */
   seismicity: (id: string, from = 0) =>
     request<{ events: SeismicEvent[]; next: number }>(`/api/runs/${id}/seismicity?from=${from}`),
+
+  /** How a run's mine reorders its work, and every change to that. 404 for a
+   *  live run, or one created before intent existed. */
+  runIntent: (id: string) => request<RunIntent>(`/api/runs/${id}/intent`),
+
+  /** Change an in-flight run's intent, from its next cycle. `expectedVersion`
+   *  makes it a compare-and-swap. */
+  patchRunIntent: (id: string, patch: Partial<IntentSettings>, expectedVersion?: number) =>
+    request<RunIntent>(
+      expectedVersion === undefined
+        ? `/api/runs/${id}/intent`
+        : `/api/runs/${id}/intent?expected_version=${expectedVersion}`,
+      { method: 'PATCH', body: JSON.stringify(patch) },
+    ),
 
   /** The people and vehicles underground during a run. */
   entities: (id: string) =>

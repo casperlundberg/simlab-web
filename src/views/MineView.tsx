@@ -2,7 +2,9 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { ApiError, api } from '../api/client'
-import type { Cycle, Entity, EntityKind, RiskLevel, SeismicEvent } from '../api/types'
+import type {
+  Cycle, CycleIntent, Entity, EntityKind, IntentSettings, IntentState, Point, RiskLevel, SeismicEvent,
+} from '../api/types'
 import { LiveDot, StatusBadge } from '../components/StatusBadge'
 import { count, duration, entityName, priorityLabel } from '../components/format'
 import { useRunCycles } from '../state/useRunCycles'
@@ -11,6 +13,9 @@ import {
   RISK_LEVELS, busiestMoment, clock, cycleAt, endOf, errorMetres, positionAt, residualMeaningful, riskAt,
   riskCounts, sceneAt, stateAt, trulyExposedAt, type EventState, type Risk,
 } from './MineView.internals'
+import {
+  STATE_WORDS as INTENT_WORDS, describeIntent, eventIntentAt, intentAtCycle, intentCounts, protectedPaths, reachSpheres,
+} from './intent'
 
 /** Simulated seconds per real second. */
 const SPEEDS = [10, 60, 300, 1800]
@@ -69,6 +74,15 @@ export function MineView() {
   })
   const entities = useMemo(() => people.data ?? [], [people.data])
 
+  // A run created before intent existed has none, and says so with a 404.
+  const intentRecord = useQuery({
+    queryKey: ['intent', id],
+    queryFn: () => api.runIntent(id),
+    enabled: layout.isSuccess,
+    retry: false,
+    refetchInterval: active ? 5_000 : false,
+  })
+
   // The last locations can land after the last poll; read them once more as
   // the run ends.
   const wasActive = useRef(active)
@@ -88,6 +102,8 @@ export function MineView() {
   const [keepFor, setKeepFor] = useState(900)
   const [showTruth, setShowTruth] = useState(false)
   const [showZones, setShowZones] = useState(true)
+  const [showReach, setShowReach] = useState(true)
+  const [showRoutes, setShowRoutes] = useState(true)
   const [selected, setSelected] = useState<number | null>(null)
   const [follow, setFollow] = useState(true)
   const [webgl, setWebgl] = useState(true)
@@ -131,6 +147,32 @@ export function MineView() {
   const trueRisk = useMemo(
     () => (showTruth ? trulyExposedAt(events, now, keepFor) : null), [showTruth, events, now, keepFor])
   const decision = useMemo(() => (start ? cycleAt(cycles, now, start) : null), [cycles, now, start])
+
+  // Intent as it was at this moment: the change in force at the cycle shown,
+  // or, for a run that has not recorded one yet, what it was created with.
+  const intentNow = useMemo<IntentSettings | null>(() => {
+    const record = intentRecord.data
+    if (!record) return null
+    const change = decision ? intentAtCycle(record.changes, decision.sequence) : null
+    return change?.settings ?? (record.changes.length ? null : record.settings)
+  }, [intentRecord.data, decision])
+  const intentStates = useMemo(() => {
+    const states = new Map<number, IntentState>()
+    for (const { event } of scene.visible) {
+      const judged = eventIntentAt(event, now)
+      if (judged && judged.basis !== 'off') states.set(event.sequence, judged.state)
+    }
+    return states
+  }, [scene, now])
+  const sensorsById = useMemo(
+    () => new Map<string, Point>((layout.data?.sensors ?? []).map((s) => [s.id, s.at])), [layout.data])
+  const reach = useMemo(
+    () => (showReach && intentNow ? reachSpheres(events, sensorsById, now) : []),
+    [showReach, intentNow, events, sensorsById, now])
+  const routes = useMemo(
+    () => (showRoutes && intentNow ? protectedPaths(entities, now, intentNow).map((p) => p.points) : []),
+    [showRoutes, intentNow, entities, now])
+  const judgedCounts = useMemo(() => intentCounts(events, now), [events, now])
   const chosen = events.find((event) => event.sequence === selected) ?? null
 
   if (detail.isLoading) return <div className="empty">Loading…</div>
@@ -199,6 +241,9 @@ export function MineView() {
               trueRisk={trueRisk}
               showZones={showZones}
               showTruth={showTruth}
+              intentStates={intentStates}
+              reach={reach}
+              routes={routes}
               selected={selected}
               onSelect={setSelected}
               onUnavailable={() => setWebgl(false)}
@@ -218,6 +263,18 @@ export function MineView() {
               <input id="mine-zones" type="checkbox" checked={showZones} onChange={(e) => setShowZones(e.target.checked)} />
               Hazard zones
             </label>
+            {intentNow ? (
+              <>
+                <label className="row" htmlFor="mine-reach">
+                  <input id="mine-reach" type="checkbox" checked={showReach} onChange={(e) => setShowReach(e.target.checked)} />
+                  Intent reach
+                </label>
+                <label className="row" htmlFor="mine-routes">
+                  <input id="mine-routes" type="checkbox" checked={showRoutes} onChange={(e) => setShowRoutes(e.target.checked)} />
+                  Protected routes
+                </label>
+              </>
+            ) : null}
             <label className="row" htmlFor="mine-truth">
               <input
                 id="mine-truth"
@@ -245,6 +302,14 @@ export function MineView() {
             <li><i className="dot crewed" aria-hidden="true" />Vehicle with crew</li>
             <li><i className="dot autonomous" aria-hidden="true" />Autonomous vehicle</li>
             <li><i className="dot ring" aria-hidden="true" />At risk: moderate, high, very high</li>
+            {intentNow ? (
+              <>
+                <li><i className="dot intent-kept" aria-hidden="true" />Work kept</li>
+                <li><i className="dot intent-decayed" aria-hidden="true" />Work decayed</li>
+                <li><i className="dot intent-promoted" aria-hidden="true" />Work promoted</li>
+                {showRoutes ? <li><i className="dot route" aria-hidden="true" />Protected route ahead</li> : null}
+              </>
+            ) : null}
             {showTruth ? <li><i className="dot ring truth" aria-hidden="true" />Really exposed</li> : null}
           </ul>
         </div>
@@ -276,6 +341,10 @@ export function MineView() {
               <dd>{scene.timeToLocate ? duration(scene.timeToLocate.max) : '—'}</dd>
             </dl>
           </section>
+
+          {intentRecord.data ? (
+            <IntentNow settings={intentNow} counts={judgedCounts} cycle={decision?.intent ?? null} />
+          ) : null}
 
           <PeopleAtRisk entities={entities} risk={risk} trueRisk={trueRisk} />
 
@@ -361,6 +430,33 @@ function Autoscaler({ cycle }: { cycle: Cycle | null }) {
         <strong>{cycle.action || 'maintain'}</strong> {cycle.reason}
       </p>
     </>
+  )
+}
+
+/** What the mine's intent was doing at this moment. */
+function IntentNow({ settings, counts, cycle }: {
+  settings: IntentSettings | null; counts: Record<IntentState, number>; cycle: CycleIntent | null
+}) {
+  return (
+    <section className="card">
+      <h3>Intent</h3>
+      <p className="faint intent-summary">{settings ? describeIntent(settings) : 'Not yet in force.'}</p>
+      <dl className="facts">
+        <FactPair term={<><i className="dot intent-kept" aria-hidden="true" />Events kept</>} value={count(counts.kept)} />
+        <FactPair term={<><i className="dot intent-decayed" aria-hidden="true" />Events decayed</>} value={count(counts.decayed)} />
+        <FactPair term={<><i className="dot intent-promoted" aria-hidden="true" />Events promoted</>}
+          value={count(counts.promoted)} strong={counts.promoted > 0} />
+        <FactPair term="Not yet judged" value={count(counts.unknown)} />
+        {cycle ? (
+          <>
+            <FactPair term="Jobs waiting decayed" value={count(cycle.decayed)} />
+            <FactPair term="Jobs waiting promoted" value={count(cycle.promoted)} />
+            <FactPair term="Exempt from cloud burst" value={count(cycle.exempt)} />
+          </>
+        ) : null}
+      </dl>
+      <p className="faint">Counts are of events with work still outstanding.</p>
+    </section>
   )
 }
 
@@ -506,7 +602,35 @@ function SelectedEvent({ event, at, showTruth, onClear }: {
           <><dt>Really exposed</dt><dd>{count(event.exposed.length)}</dd></>
         ) : null}
       </dl>
+      <IntentHistory event={event} at={at} />
     </section>
+  )
+}
+
+/** Every change of mind intent had about an event, up to the moment shown. */
+function IntentHistory({ event, at }: { event: SeismicEvent; at: number }) {
+  const so = (event.intent ?? []).filter((tr) => tr.at_seconds <= at)
+  if (!so.length) return null
+  return (
+    <>
+      <h4 className="faint">What intent made of it</h4>
+      <ul className="intent-history">
+        {so.map((tr) => (
+          <li key={`${tr.at_seconds}-${tr.state}-${tr.basis ?? ''}`}>
+            <span className="mono">{clock(tr.at_seconds)}</span>
+            <span className={`intent-state ${tr.state}`}>{tr.basis === 'off' ? 'let go' : tr.state}</span>
+            <span className="faint">
+              {tr.basis === 'off'
+                ? 'intent switched off'
+                : tr.state === 'unknown'
+                  ? INTENT_WORDS.unknown
+                  : `${tr.entity ? `${entityName(tr.entity)} at ${Math.round(tr.distance_m)} m` : 'nobody protected'}`
+                    + ` · reach ${Math.round(tr.reach_m)} m · from ${tr.basis ?? ''}`}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </>
   )
 }
 

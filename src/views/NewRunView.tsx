@@ -4,6 +4,8 @@ import { useMutation, useQuery } from '@tanstack/react-query'
 import { api } from '../api/client'
 import { duration } from '../components/format'
 import { numericSettings } from './settings'
+import { IntentEditor } from './IntentEditor'
+import { DEFAULT_INTENT, describeIntent, intentDocument, toDraft } from './intent'
 
 /** The settings a run is most often varied on. The full document has many
  *  more fields; these are the ones a comparison usually turns on, and the
@@ -29,6 +31,7 @@ export function NewRunView() {
   const [interval, setInterval] = useState('15')
   const [compression, setCompression] = useState('600')
   const [settings, setSettings] = useState<Record<string, string>>({})
+  const [intent, setIntent] = useState(() => toDraft(DEFAULT_INTENT))
 
   const scenarios = useQuery({ queryKey: ['scenarios'], queryFn: () => api.scenarios() })
   const targets = useQuery({ queryKey: ['targets'], queryFn: () => api.targets() })
@@ -43,6 +46,7 @@ export function NewRunView() {
         decision_interval_seconds: Number(interval) || 15,
         time_compression: mode === 'simulation' ? Number(compression) || 600 : undefined,
         settings: numericSettings(settings),
+        intent: mode === 'simulation' ? intentDocument(intent) : undefined,
       }),
     onSuccess: (run) => navigate(`/runs/${run.id}`),
   })
@@ -191,6 +195,20 @@ export function NewRunView() {
           </label>
         </div>
       </div>
+
+      {mode === 'simulation' ? (
+        <div className="card">
+          <div className="card-head">
+            <h2>Intent</h2>
+            <span className="faint">Can be changed while the run is in flight</span>
+          </div>
+          <p className="muted intent-summary">
+            How the mine reorders work it has already queued, from where events are and who is near
+            them or heading towards them. Now: {describeIntent({ ...DEFAULT_INTENT, ...intentDocument(intent) } as typeof DEFAULT_INTENT)}.
+          </p>
+          <IntentEditor draft={intent} onChange={setIntent} idPrefix="new-intent" />
+        </div>
+      ) : null}
     </>
   )
 }

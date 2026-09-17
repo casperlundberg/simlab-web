@@ -27,6 +27,14 @@ platform credentials and no way to leak them.
   autonomous vehicle is an outline. Anyone inside a located event's zone gets
   a ring in the risk colour for its level, and the high and very-high zones
   are drawn around the location.
+- **Intent** — how the mine reorders its work: set when a simulation run is
+  created, and changed while it is in flight from the run's page, in force from
+  the next cycle. The page lists every version with the cycle it took effect
+  from, and charts the waiting work intent decayed, promoted and exempted from
+  cloud burst. In the virtual mine, each located event takes the colour of what
+  intent decided — kept, decayed or promoted — with the sphere it was decided
+  with, and the protected routes ahead of every person and vehicle are drawn
+  along the tunnels.
 - **Live** — the same timeline, streaming, while a run is in flight.
 - **Targets** — the autoscaler targets Simlab knows about, and an editor for
   their runtime settings. Editing here changes the live autoscaler.
@@ -51,6 +59,14 @@ platform credentials and no way to leak them.
   it anywhere would mean using the ground truth, which is exactly what the
   mine does not have. Its sensors light up instead, and the wait is the part
   of the picture the autoscaler is responsible for.
+- **Intent's colours are their own.** Kept is the estimate blue, decayed a
+  brown and promoted a magenta, validated for colour-vision deficiency on the
+  chart surface in both themes, and distinct from the risk palette so an event's
+  treatment is never read as someone's danger.
+- **An intent edit sends only what changed.** It is a patch against the version
+  the form was loaded from, so it cannot quietly undo a change another operator
+  made to a field this form did not touch; a stale version is refused and the
+  form reloads.
 - **three.js loads only with the mine view.** It is larger than the rest of the
   app, and most visits never draw a mine.
 
