@@ -1,15 +1,15 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { ApiError, api } from '../api/client'
-import type { Cycle, SeismicEvent } from '../api/types'
+import type { Cycle, Entity, EntityKind, RiskLevel, SeismicEvent } from '../api/types'
 import { LiveDot, StatusBadge } from '../components/StatusBadge'
-import { count, duration, priorityLabel } from '../components/format'
+import { count, duration, entityName, priorityLabel } from '../components/format'
 import { useRunCycles } from '../state/useRunCycles'
 import { MineScene } from './MineScene'
 import {
-  busiestMoment, clock, cycleAt, endOf, errorMetres, positionAt, residualMeaningful, sceneAt, stateAt,
-  type EventState,
+  RISK_LEVELS, busiestMoment, clock, cycleAt, endOf, errorMetres, positionAt, residualMeaningful, riskAt,
+  riskCounts, sceneAt, stateAt, trulyExposedAt, type EventState, type Risk,
 } from './MineView.internals'
 
 /** Simulated seconds per real second. */
@@ -60,6 +60,15 @@ export function MineView() {
     refetchInterval: active ? 5_000 : false,
   })
 
+  // Recorded as the run starts and never changed, so read once.
+  const people = useQuery({
+    queryKey: ['entities', id],
+    queryFn: () => api.entities(id),
+    enabled: layout.isSuccess,
+    staleTime: Infinity,
+  })
+  const entities = useMemo(() => people.data ?? [], [people.data])
+
   // The last locations can land after the last poll; read them once more as
   // the run ends.
   const wasActive = useRef(active)
@@ -78,6 +87,7 @@ export function MineView() {
   const [speed, setSpeed] = useState(60)
   const [keepFor, setKeepFor] = useState(900)
   const [showTruth, setShowTruth] = useState(false)
+  const [showZones, setShowZones] = useState(true)
   const [selected, setSelected] = useState<number | null>(null)
   const [follow, setFollow] = useState(true)
   const [webgl, setWebgl] = useState(true)
@@ -117,6 +127,9 @@ export function MineView() {
   }, [playing, speed, end])
 
   const scene = useMemo(() => sceneAt(events, now, keepFor), [events, now, keepFor])
+  const risk = useMemo(() => riskAt(scene, entities, now), [scene, entities, now])
+  const trueRisk = useMemo(
+    () => (showTruth ? trulyExposedAt(events, now, keepFor) : null), [showTruth, events, now, keepFor])
   const decision = useMemo(() => (start ? cycleAt(cycles, now, start) : null), [cycles, now, start])
   const chosen = events.find((event) => event.sequence === selected) ?? null
 
@@ -180,6 +193,11 @@ export function MineView() {
             <MineScene
               layout={layout.data}
               scene={scene}
+              t={now}
+              entities={entities}
+              risk={risk}
+              trueRisk={trueRisk}
+              showZones={showZones}
               showTruth={showTruth}
               selected={selected}
               onSelect={setSelected}
@@ -196,6 +214,10 @@ export function MineView() {
           {!layout.data && webgl ? <div className="empty mine-unavailable">Loading the mine…</div> : null}
 
           <div className="mine-toolbar">
+            <label className="row" htmlFor="mine-zones">
+              <input id="mine-zones" type="checkbox" checked={showZones} onChange={(e) => setShowZones(e.target.checked)} />
+              Hazard zones
+            </label>
             <label className="row" htmlFor="mine-truth">
               <input
                 id="mine-truth"
@@ -219,6 +241,11 @@ export function MineView() {
             <li><i className="dot first" aria-hidden="true" />First location</li>
             <li><i className="dot final" aria-hidden="true" />Final location</li>
             {showTruth ? <li><i className="dot truth" aria-hidden="true" />True epicentre</li> : null}
+            <li><i className="dot person" aria-hidden="true" />Person</li>
+            <li><i className="dot crewed" aria-hidden="true" />Vehicle with crew</li>
+            <li><i className="dot autonomous" aria-hidden="true" />Autonomous vehicle</li>
+            <li><i className="dot ring" aria-hidden="true" />At risk: moderate, high, very high</li>
+            {showTruth ? <li><i className="dot ring truth" aria-hidden="true" />Really exposed</li> : null}
           </ul>
         </div>
 
@@ -235,8 +262,10 @@ export function MineView() {
             <h3>Seismicity</h3>
             <dl className="facts">
               <dt>Events so far</dt><dd>{count(scene.counts.happened)}</dd>
-              <dt><i className="dot busy" aria-hidden="true" />Awaiting a location</dt>
+              <dt>Awaiting a location</dt>
               <dd className={scene.counts.awaiting > 0 ? 'attention' : ''}>{count(scene.counts.awaiting)}</dd>
+              <dt><i className="dot busy" aria-hidden="true" />Sensors with picks waiting</dt>
+              <dd>{count(scene.busySensors.size)}</dd>
               <dt>Located</dt><dd>{count(scene.counts.located)}</dd>
               {scene.counts.unlocatable > 0 ? (
                 <><dt>Too few sensors to locate</dt><dd>{count(scene.counts.unlocatable)}</dd></>
@@ -247,6 +276,8 @@ export function MineView() {
               <dd>{scene.timeToLocate ? duration(scene.timeToLocate.max) : '—'}</dd>
             </dl>
           </section>
+
+          <PeopleAtRisk entities={entities} risk={risk} trueRisk={trueRisk} />
 
           {chosen ? (
             <SelectedEvent event={chosen} at={now} showTruth={showTruth} onClear={() => setSelected(null)} />
@@ -360,6 +391,64 @@ function Tier({ label, tier, ready, planned, scale }: {
   )
 }
 
+const KIND_WORDS: Record<EntityKind, [string, string]> = {
+  person: ['person', 'people'],
+  'crewed-vehicle': ['crewed vehicle', 'crewed vehicles'],
+  'autonomous-vehicle': ['autonomous vehicle', 'autonomous vehicles'],
+}
+
+const LEVEL_WORDS: Record<RiskLevel, string> = { moderate: 'Moderate', high: 'High', 'very-high': 'Very high' }
+
+/** Who is underground, and who is within an event's zone right now — by the
+ *  mine's estimates, and, with the truth shown, by where events really were. */
+function PeopleAtRisk({ entities, risk, trueRisk }: {
+  entities: Entity[]; risk: Map<string, Risk>; trueRisk: Map<string, Risk> | null
+}) {
+  if (!entities.length) return null
+  const counts = riskCounts(risk)
+  const kinds = (Object.keys(KIND_WORDS) as EntityKind[])
+    .map((kind) => [kind, entities.filter((e) => e.kind === kind).length] as const)
+    .filter(([, n]) => n > 0)
+  const atRisk = [...risk.entries()].sort(([, a], [, b]) => RISK_LEVELS.indexOf(b.level) - RISK_LEVELS.indexOf(a.level))
+
+  return (
+    <section className="card">
+      <h3>People and vehicles</h3>
+      <p className="faint mine-kinds">
+        {kinds.map(([kind, n]) => `${n} ${KIND_WORDS[kind][n === 1 ? 0 : 1]}`).join(' · ')}
+      </p>
+      <dl className="facts">
+        {[...RISK_LEVELS].reverse().map((level) => (
+          <FactPair key={level} term={<><i className={`dot risk ${level}`} aria-hidden="true" />{LEVEL_WORDS[level]} risk</>}
+            value={count(counts[level])} strong={counts[level] > 0} />
+        ))}
+      </dl>
+      {atRisk.length ? (
+        <ul className="mine-risk-list">
+          {atRisk.slice(0, 8).map(([entity, r]) => (
+            <li key={entity}>
+              <span>{entityName(entity)}</span>
+              <span className={`risk-word ${r.level}`}>{LEVEL_WORDS[r.level].toLowerCase()}</span>
+              <span className="faint">event {r.event}</span>
+            </li>
+          ))}
+          {atRisk.length > 8 ? <li className="faint">and {atRisk.length - 8} more</li> : null}
+        </ul>
+      ) : null}
+      {trueRisk ? (
+        <p className="faint mine-truth-note">
+          Really exposed by events in the window: {trueRisk.size}
+          {trueRisk.size !== risk.size ? ` — the mine counts ${risk.size}` : ''}
+        </p>
+      ) : null}
+    </section>
+  )
+}
+
+function FactPair({ term, value, strong }: { term: ReactNode; value: string; strong?: boolean }) {
+  return <><dt>{term}</dt><dd className={strong ? 'attention' : ''}>{value}</dd></>
+}
+
 const STATE_WORDS: Record<EventState, string> = {
   future: 'not yet happened',
   awaiting: 'awaiting a location',
@@ -393,6 +482,12 @@ function SelectedEvent({ event, at, showTruth, onClear }: {
         {location ? (
           <>
             <dt>From</dt><dd>{count(location.picks)} picks</dd>
+            {location.magnitude != null ? (
+              <><dt>Magnitude</dt><dd>mN {location.magnitude.toFixed(1)}</dd></>
+            ) : null}
+            {location.exposed ? (
+              <><dt>Exposed, by the mine</dt><dd>{count(location.exposed.length)}</dd></>
+            ) : null}
             <dt>Residual</dt>
             <dd title={residualMeaningful(location) ? undefined : 'Four picks fit any location exactly, so there is nothing to check this one against.'}>
               {residualMeaningful(location) ? duration(location.rms_residual_seconds) : 'unmeasurable at 4 picks'}
@@ -404,6 +499,12 @@ function SelectedEvent({ event, at, showTruth, onClear }: {
           </>
         ) : null}
         {error !== null ? <><dt>Off the truth by</dt><dd>{Math.round(error)} m</dd></> : null}
+        {showTruth && event.magnitude != null ? (
+          <><dt>True magnitude</dt><dd>mN {event.magnitude.toFixed(1)}</dd></>
+        ) : null}
+        {showTruth && event.exposed ? (
+          <><dt>Really exposed</dt><dd>{count(event.exposed.length)}</dd></>
+        ) : null}
       </dl>
     </section>
   )

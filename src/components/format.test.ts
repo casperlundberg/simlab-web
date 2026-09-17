@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { count, duration, executorHours, percent, priorityLabel } from './format'
+import { count, duration, executorHours, percent, priorityLabel, entityName } from './format'
 
 describe('formatting', () => {
   it('scales a duration to a unit a person reads', () => {
@@ -35,5 +35,19 @@ describe('formatting', () => {
     expect(priorityLabel('25')).toBe('P25 pick')
     // A level the workload invented still renders, just without a name.
     expect(priorityLabel('7')).toBe('P7')
+  })
+})
+
+describe('naming a person or vehicle', () => {
+  // Ids are made for machines: "autonomous-vehicle-01" wraps in a narrow list
+  // and reads worse than what an operator would say.
+  it('reads as a kind and a number', () => {
+    expect(entityName('person-03')).toBe('Person 3')
+    expect(entityName('crewed-vehicle-12')).toBe('Crewed vehicle 12')
+    expect(entityName('autonomous-vehicle-01')).toBe('Autonomous 1')
+  })
+
+  it('leaves an id it does not recognise as it is', () => {
+    expect(entityName('drill-rig-a')).toBe('drill-rig-a')
   })
 })

@@ -20,9 +20,43 @@ export interface Sensor {
   at: Point
 }
 
+export interface Tunnel {
+  id: string
+  /** shaft, ramp, drive, crosscut, ore-drive or access */
+  kind: string
+  path: Point[]
+}
+
 export interface Layout {
   extent: { min: Point; max: Point }
   sensors: Sensor[]
+  tunnels?: Tunnel[]
+}
+
+export type EntityKind = 'person' | 'crewed-vehicle' | 'autonomous-vehicle'
+
+/** [seconds, x, y, z] */
+export type Waypoint = [number, number, number, number]
+
+export interface Entity {
+  id: string
+  kind: EntityKind
+  track: Waypoint[]
+}
+
+export type RiskLevel = 'moderate' | 'high' | 'very-high'
+
+export interface Exposure {
+  entity: string
+  level: RiskLevel
+  ppv_mps: number
+  distance_m: number
+}
+
+export interface Workforce {
+  people: number
+  crewed_vehicles: number
+  autonomous_vehicles: number
 }
 
 export interface Mine {
@@ -40,6 +74,9 @@ export interface Burst {
   magnitude: number
   aftershock_decay_seconds?: number
   epicentre?: Point
+  /** Nuttli magnitude of the burst's main shock; unrelated to `magnitude`,
+   *  which scales the event rate. */
+  main_magnitude?: number
 }
 
 export interface Scenario {
@@ -49,6 +86,7 @@ export interface Scenario {
   duration_seconds: number
   job_seconds: number
   pick_jitter_seconds?: number
+  workforce?: Workforce
   seed?: number | undefined
   priority_mix: Record<string, number>
   bursts?: Burst[]
@@ -117,6 +155,13 @@ export interface Location {
   /** The arrival-time error the solution could not explain: how far to trust it. */
   rms_residual_seconds: number
   picks: number
+  /** The mine's estimate of the magnitude, from the same picks. */
+  magnitude?: number | null
+  /** How far each level of ground motion extends from this location, in
+   *  metres, widened by the allowance for location error. */
+  zones?: Partial<Record<RiskLevel, number>>
+  /** Who the mine judged exposed from this location, when it had it. */
+  exposed?: Exposure[]
 }
 
 export interface SeismicEvent {
@@ -129,12 +174,20 @@ export interface SeismicEvent {
   /** Where it really happened. Known to the simulator only — the mine never
    *  reads it — and shown so an estimate can be compared with the truth. */
   truth: Point
+  /** How large it really was. Ground truth, like `truth`. */
+  magnitude?: number | null
+  /** Who it really exposed, where they were when it happened. */
+  exposed?: Exposure[] | null
   /** Detecting sensors, first arrival first. Each is one pick job. */
   sensors: string[]
   located_at_seconds: number | null
   located: Location | null
   processed_at_seconds: number | null
   final: Location | null
+  /** When each pick was processed, in the order of `sensors`; null for one
+   *  still waiting. Null as a whole for an event recorded before this was
+   *  tracked, and absent from a backend that predates it. */
+  picks_processed_at_seconds?: (number | null)[] | null
 }
 
 export interface Metrics {

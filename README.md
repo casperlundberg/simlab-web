@@ -22,7 +22,11 @@ platform credentials and no way to leak them.
   sensors with picks still waiting, where the mine located each event and
   when, and what the autoscaler had running at that moment. It draws what the
   mine knew; true epicentres are a separate layer, off by default. A finished
-  run opens at the moment the most events were waiting for a location.
+  run opens at the moment the most events were waiting for a location. The
+  tunnels are drawn as pipes; people are round, vehicles are boxes, and an
+  autonomous vehicle is an outline. Anyone inside a located event's zone gets
+  a ring in the risk colour for its level, and the high and very-high zones
+  are drawn around the location.
 - **Live** — the same timeline, streaming, while a run is in flight.
 - **Targets** — the autoscaler targets Simlab knows about, and an editor for
   their runtime settings. Editing here changes the live autoscaler.

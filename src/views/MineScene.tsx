@@ -2,14 +2,23 @@ import { useEffect, useRef } from 'react'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import { CSS2DObject, CSS2DRenderer } from 'three/addons/renderers/CSS2DRenderer.js'
-import type { Layout, Point } from '../api/types'
-import type { SceneAt } from './MineView.internals'
-import { SCENE_SIZE, isClick, nearestWithin, toScene } from './MineView.internals'
+import type { Entity, EntityKind, Layout, Point, RiskLevel } from '../api/types'
+import type { Risk, SceneAt } from './MineView.internals'
+import { SCENE_SIZE, entityAt, isClick, nearestWithin, toScene } from './MineView.internals'
 import { cssVar } from '../components/theme'
 
 interface Props {
   layout: Layout
   scene: SceneAt
+  /** The moment being shown, in scenario seconds. */
+  t: number
+  entities: Entity[]
+  /** Who is at risk at t, by the mine's estimates. */
+  risk: Map<string, Risk>
+  /** Who was really exposed, when the truth is shown. */
+  trueRisk: Map<string, Risk> | null
+  /** Draw the high and very-high zones around located events. */
+  showZones: boolean
   /** Draw where events really were. The mine never knew this. */
   showTruth: boolean
   selected: number | null
@@ -35,7 +44,11 @@ interface Stage {
   truth: InstancedPool
   errors: THREE.LineSegments
   selection: THREE.Mesh
-  colours: Record<'sensor' | 'busy' | 'estimate' | 'truth' | 'surface', THREE.Color>
+  people: Record<EntityKind, THREE.InstancedMesh>
+  rings: THREE.InstancedMesh
+  trueRings: THREE.InstancedMesh
+  zones: Record<'high' | 'very-high', THREE.InstancedMesh>
+  colours: Record<'sensor' | 'busy' | 'estimate' | 'truth' | 'surface' | 'entity' | RiskLevel, THREE.Color>
   render: () => void
 }
 
@@ -50,7 +63,9 @@ interface Stage {
  * Renders on demand — when the data changes or the camera moves — rather than
  * in a continuous loop, so a view left open in a tab costs nothing.
  */
-export function MineScene({ layout, scene, showTruth, selected, onSelect, onUnavailable, theme }: Props) {
+export function MineScene({
+  layout, scene, t, entities, risk, trueRisk, showZones, showTruth, selected, onSelect, onUnavailable, theme,
+}: Props) {
   const container = useRef<HTMLDivElement>(null)
   const stage = useRef<Stage | null>(null)
 
@@ -60,8 +75,8 @@ export function MineScene({ layout, scene, showTruth, selected, onSelect, onUnav
   select.current = onSelect
   const unavailable = useRef(onUnavailable)
   unavailable.current = onUnavailable
-  const latest = useRef({ scene, showTruth, selected })
-  latest.current = { scene, showTruth, selected }
+  const latest = useRef<Drawn>({ scene, t, entities, risk, trueRisk, showZones, showTruth, selected })
+  latest.current = { scene, t, entities, risk, trueRisk, showZones, showTruth, selected }
 
   useEffect(() => {
     const host = container.current
@@ -74,7 +89,7 @@ export function MineScene({ layout, scene, showTruth, selected, onSelect, onUnav
       unavailable.current()
       return
     }
-    const built = build(host, renderer, layout)
+    const built = build(host, renderer, layout, latest.current.entities)
     stage.current = built
     update(built, layout, latest.current)
 
@@ -110,13 +125,25 @@ export function MineScene({ layout, scene, showTruth, selected, onSelect, onUnav
       host.replaceChildren()
       stage.current = null
     }
-  }, [layout, theme])
+  }, [layout, theme, entities])
 
   useEffect(() => {
-    if (stage.current) update(stage.current, layout, { scene, showTruth, selected })
-  }, [layout, scene, showTruth, selected])
+    if (stage.current) update(stage.current, layout, { scene, t, entities, risk, trueRisk, showZones, showTruth, selected })
+  }, [layout, scene, t, entities, risk, trueRisk, showZones, showTruth, selected])
 
   return <div ref={container} className="mine-canvas" />
+}
+
+/** Everything a frame draws from. */
+interface Drawn {
+  scene: SceneAt
+  t: number
+  entities: Entity[]
+  risk: Map<string, Risk>
+  trueRisk: Map<string, Risk> | null
+  showZones: boolean
+  showTruth: boolean
+  selected: number | null
 }
 
 /** An instanced mesh that remembers which event each instance is, and where
@@ -135,7 +162,7 @@ function pool(world: THREE.Scene, geometry: THREE.BufferGeometry, material: THRE
   return { mesh, sequences: [], positions: [] }
 }
 
-function build(host: HTMLDivElement, renderer: THREE.WebGLRenderer, layout: Layout): Stage {
+function build(host: HTMLDivElement, renderer: THREE.WebGLRenderer, layout: Layout, entities: Entity[]): Stage {
   const width = host.clientWidth || 800
   const height = host.clientHeight || 500
 
@@ -166,9 +193,17 @@ function build(host: HTMLDivElement, renderer: THREE.WebGLRenderer, layout: Layo
     estimate: new THREE.Color(cssVar('--mine-estimate')),
     truth: new THREE.Color(cssVar('--mine-truth')),
     surface: new THREE.Color(cssVar('--surface')),
+    entity: new THREE.Color(cssVar('--mine-entity')),
+    moderate: new THREE.Color(cssVar('--risk-moderate')),
+    high: new THREE.Color(cssVar('--risk-high')),
+    'very-high': new THREE.Color(cssVar('--risk-very-high')),
   }
 
+  // Tunnels are the only lit surfaces: a flat colour makes a pipe read as a
+  // line, and it is the shading that shows which drift is in front.
+  world.add(new THREE.HemisphereLight(0xffffff, 0x888888, 2.2))
   addRock(world, layout)
+  addTunnels(world, layout)
 
   const sensorIndex = new Map<string, number>()
   const sensors = new THREE.InstancedMesh(
@@ -204,9 +239,33 @@ function build(host: HTMLDivElement, renderer: THREE.WebGLRenderer, layout: Layo
   selection.visible = false
   world.add(selection)
 
+  // People are round, vehicles are boxes, and a vehicle with nobody in it is
+  // an outline: solid means a person is there.
+  const count = (kind: EntityKind) => Math.max(1, entities.filter((e) => e.kind === kind).length)
+  // Larger than sensors: they are what the safety question is about.
+  const personSize = SCENE_SIZE * 0.011
+  const vehicle = new THREE.BoxGeometry(SCENE_SIZE * 0.024, SCENE_SIZE * 0.012, SCENE_SIZE * 0.014)
+  const people = {
+    person: instanced(world, new THREE.SphereGeometry(personSize, 12, 8), new THREE.MeshBasicMaterial({ color: 0xffffff }), count('person')),
+    'crewed-vehicle': instanced(world, vehicle, new THREE.MeshBasicMaterial({ color: 0xffffff }), count('crewed-vehicle')),
+    'autonomous-vehicle': instanced(world, vehicle.clone(), new THREE.MeshBasicMaterial({ color: 0xffffff, wireframe: true }), count('autonomous-vehicle')),
+  }
+
+  // A flat ring round anyone at risk, lying in the level's plane so it reads
+  // as an area on the floor around them.
+  const ring = new THREE.TorusGeometry(1, 0.07, 6, 32).rotateX(Math.PI / 2)
+  const rings = instanced(world, ring, new THREE.MeshBasicMaterial({ color: 0xffffff }), Math.max(1, entities.length))
+  const trueRings = instanced(world, ring.clone(), new THREE.MeshBasicMaterial({ color: 0xffffff, wireframe: true }), Math.max(1, entities.length))
+
+  // Zones are translucent and do not write depth, so the tunnels and people
+  // inside them stay visible and overlapping zones do not hide each other.
+  const shell = (token: string) => instanced(world, new THREE.SphereGeometry(1, 24, 16),
+    new THREE.MeshBasicMaterial({ color: new THREE.Color(cssVar(token)), transparent: true, opacity: 0.1, depthWrite: false }), 512)
+  const zones = { high: shell('--risk-high'), 'very-high': shell('--risk-very-high') }
+
   const stage: Stage = {
     renderer, labels, camera, controls, world, sensors, sensorIndex,
-    first, final, truth, errors, selection, colours,
+    first, final, truth, errors, selection, people, rings, trueRings, zones, colours,
     render: () => {
       renderer.render(world, camera)
       labels.render(world, camera)
@@ -214,6 +273,32 @@ function build(host: HTMLDivElement, renderer: THREE.WebGLRenderer, layout: Layo
   }
   controls.addEventListener('change', stage.render)
   return stage
+}
+
+function instanced(world: THREE.Scene, geometry: THREE.BufferGeometry, material: THREE.Material, capacity: number) {
+  const mesh = new THREE.InstancedMesh(geometry, material, capacity)
+  mesh.count = 0
+  mesh.frustumCulled = false
+  world.add(mesh)
+  return mesh
+}
+
+/** The tunnels, as low-resolution pipes: six sides, one segment per leg. */
+function addTunnels(world: THREE.Scene, layout: Layout) {
+  const material = new THREE.MeshLambertMaterial({ color: new THREE.Color(cssVar('--mine-tunnel')) })
+  // Several times wider than a real drift, which at the scale of a whole mine
+  // would be thinner than a pixel.
+  const radius = SCENE_SIZE * 0.0035
+  for (const tunnel of layout.tunnels ?? []) {
+    if (tunnel.path.length < 2) continue
+    const points = tunnel.path.map((p) => {
+      const at = toScene(p, layout.extent)
+      return new THREE.Vector3(at.x, at.y, at.z)
+    })
+    const path = new THREE.CurvePath<THREE.Vector3>()
+    for (let i = 1; i < points.length; i++) path.add(new THREE.LineCurve3(points[i - 1]!, points[i]!))
+    world.add(new THREE.Mesh(new THREE.TubeGeometry(path, points.length - 1, radius, 6, false), material))
+  }
 }
 
 /** The rock: the mine's extent, a faint outline at each level, and labels a
@@ -287,9 +372,7 @@ function ensure(stage: Stage, which: 'first' | 'final' | 'truth', needed: number
   stage[which] = pool(stage.world, current.mesh.geometry, current.mesh.material as THREE.Material, capacity)
 }
 
-function update(stage: Stage, layout: Layout, { scene, showTruth, selected }: {
-  scene: SceneAt; showTruth: boolean; selected: number | null
-}) {
+function update(stage: Stage, layout: Layout, { scene, t, entities, risk, trueRisk, showZones, showTruth, selected }: Drawn) {
   const vector = (point: Point) => {
     const p = toScene(point, layout.extent)
     return new THREE.Vector3(p.x, p.y, p.z)
@@ -301,7 +384,7 @@ function update(stage: Stage, layout: Layout, { scene, showTruth, selected }: {
     // heard by most of the array at once, so busy sensors are often most of
     // the sensors; sized by backlog without a cap they buried the events the
     // view exists to show.
-    place(stage.sensors, i, vector(sensor.at), busy > 0 ? 1.3 + Math.min(busy, 20) * 0.035 : 1)
+    place(stage.sensors, i, vector(sensor.at), busy > 0 ? 1.25 + Math.min(busy, 10) * 0.035 : 1)
     stage.sensors.setColorAt(i, busy > 0 ? stage.colours.busy : stage.colours.sensor)
   })
   stage.sensors.instanceMatrix.needsUpdate = true
@@ -358,7 +441,70 @@ function update(stage: Stage, layout: Layout, { scene, showTruth, selected }: {
   stage.selection.visible = selectedAt !== null
   if (selectedAt) stage.selection.position.copy(selectedAt)
 
+  drawPeople(stage, layout, t, entities, risk, trueRisk)
+  drawZones(stage, layout, scene, showZones)
+
   stage.render()
+}
+
+function drawPeople(stage: Stage, layout: Layout, t: number, entities: Entity[],
+  risk: Map<string, Risk>, trueRisk: Map<string, Risk> | null) {
+  // Ring radius at each level, in tenths of the scene: wider for worse, so the level
+  // reads without the colour too.
+  const ringSize: Record<RiskLevel, number> = { moderate: 0.2, high: 0.28, 'very-high': 0.36 }
+
+  for (const mesh of Object.values(stage.people)) mesh.count = 0
+  stage.rings.count = 0
+  stage.trueRings.count = 0
+
+  for (const entity of entities) {
+    const at = toScene(entityAt(entity, t), layout.extent)
+    const position = new THREE.Vector3(at.x, at.y, at.z)
+    const mesh = stage.people[entity.kind]
+    if (!mesh) continue
+
+    const level = risk.get(entity.id)?.level
+    const i = mesh.count++
+    place(mesh, i, position)
+    mesh.setColorAt(i, level ? stage.colours[level] : stage.colours.entity)
+
+    if (level) {
+      const r = stage.rings.count++
+      place(stage.rings, r, position, ringSize[level] * SCENE_SIZE / 10)
+      stage.rings.setColorAt(r, stage.colours[level])
+    }
+    const truly = trueRisk?.get(entity.id)?.level
+    if (truly) {
+      const r = stage.trueRings.count++
+      place(stage.trueRings, r, position, (ringSize[truly] + 0.05) * SCENE_SIZE / 10)
+      stage.trueRings.setColorAt(r, stage.colours.truth)
+    }
+  }
+  for (const mesh of [...Object.values(stage.people), stage.rings, stage.trueRings]) {
+    mesh.instanceMatrix.needsUpdate = true
+    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true
+  }
+}
+
+/** The high and very-high zones around each location in the scene. The
+ *  moderate zone of anything but the smallest event spans most of the mine,
+ *  and drawn it would hide everything else; it is still counted. */
+function drawZones(stage: Stage, layout: Layout, scene: SceneAt, show: boolean) {
+  const { min, max } = layout.extent
+  const scale = SCENE_SIZE / Math.max(max.x - min.x, max.y - min.y, max.z - min.z, 1e-9)
+
+  for (const [level, mesh] of Object.entries(stage.zones) as ['high' | 'very-high', THREE.InstancedMesh][]) {
+    mesh.count = 0
+    if (show) {
+      for (const { position } of scene.visible) {
+        const radius = position?.zones?.[level]
+        if (!position || radius === undefined || mesh.count >= mesh.instanceMatrix.count) continue
+        const at = toScene(position.at, layout.extent)
+        place(mesh, mesh.count++, new THREE.Vector3(at.x, at.y, at.z), radius * scale)
+      }
+    }
+    mesh.instanceMatrix.needsUpdate = true
+  }
 }
 
 /** The event under a click, or null for empty space.

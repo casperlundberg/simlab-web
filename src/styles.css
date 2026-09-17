@@ -38,17 +38,26 @@
   --priority-4: #5598e7;
   --priority-5: #86b6ef;
 
-  /* The virtual mine. Estimates and sensors with work waiting take the first
-     two slots of a validated categorical palette, which stay distinct from
+  /* The virtual mine. Estimates and sensors with work waiting take slots 1 and
+     3 of a validated categorical palette, which stay distinct from
      each other under colour-vision deficiency. The true epicentre is neutral
      ink with its own shape: it is a debug layer, not a third category. */
   --mine-rock: #b5bdc7;
   --mine-level: #e1e5ea;
   --mine-sensor: #7b8593;
-  --mine-busy: #eb6834;
+  --mine-busy: #1baf7a;
   --mine-estimate: #2a78d6;
   --mine-truth: #16191d;
   --mine-selected: #16191d;
+  --mine-tunnel: #a3adb8;
+  --mine-entity: #334155;
+
+  /* Risk to people and vehicles, from the reserved status steps: never reused
+     for a category, and always shown with the level written beside it, since
+     moderate and high sit below 3:1 on the light surface. */
+  --risk-moderate: #fab219;
+  --risk-high: #ec835a;
+  --risk-very-high: #d03b3b;
 
   --danger: #c0392b;
   --danger-soft: #fbeae8;
@@ -93,10 +102,12 @@
     --mine-rock: #4a5360;
     --mine-level: #2b3139;
     --mine-sensor: #8a94a2;
-    --mine-busy: #d95926;
+    --mine-busy: #199e70;
     --mine-estimate: #3987e5;
     --mine-truth: #e8ebef;
     --mine-selected: #e8ebef;
+    --mine-tunnel: #5b6572;
+    --mine-entity: #d6dde6;
 
     --danger: #ef6a5c;
     --danger-soft: #2e1a18;
@@ -405,6 +416,19 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 .dot.first { border: 1.5px dashed var(--mine-estimate); }
 .dot.final { background: var(--mine-estimate); }
 .dot.truth { border: 1.5px solid var(--mine-truth); border-radius: 1px; transform: rotate(45deg) scale(0.8); }
+.dot.person { background: var(--mine-entity); width: 7px; height: 7px; }
+.dot.crewed { background: var(--mine-entity); border-radius: 1px; width: 10px; height: 6px; }
+.dot.autonomous { border: 1.5px solid var(--mine-entity); border-radius: 1px; width: 10px; height: 6px; }
+.dot.ring { border: 2px solid var(--risk-high); box-shadow: 0 0 0 2px var(--risk-moderate); width: 9px; height: 9px; }
+.dot.ring.truth { border-color: var(--mine-truth); box-shadow: none; border-style: dashed; }
+.dot.risk.moderate { background: var(--risk-moderate); }
+.dot.risk.high { background: var(--risk-high); }
+.dot.risk.very-high { background: var(--risk-very-high); }
+.mine-kinds { margin: 0 0 4px; font-size: 12px; }
+.mine-risk-list { list-style: none; margin: 10px 0 0; padding: 0; font-size: 12px; display: grid; gap: 3px; }
+.mine-risk-list li { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 8px; align-items: baseline; }
+.risk-word { font-weight: 600; color: var(--text); }
+.mine-truth-note { margin: 10px 0 0; font-size: 12px; }
 
 .mine-hud { display: grid; gap: 14px; }
 .mine-hud .card + .card { margin-top: 0; }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { Cycle, Layout, SeismicEvent } from '../api/types'
+import type { Cycle, Entity, Layout, SeismicEvent } from '../api/types'
 import { __test } from './MineView.internals'
 
 // What a 3D scene shows is decided here, not in the scene. A wrong scene is
@@ -135,6 +135,26 @@ describe('the mine at a moment in the run', () => {
   // A located event fades out of the scene after the window; one still
   // waiting never does, however long it waits, because that wait is the
   // thing worth seeing.
+  // The view lit every sensor of an event until its last pick finished, and so
+  // showed more sensors with work waiting than there was work waiting on. With
+  // each pick's own time recorded, a sensor is busy only while its pick is.
+  it('marks a sensor busy only while its own pick is waiting', () => {
+    const partly = event({
+      sequence: 7, origin_seconds: 10, sensors: ['s01', 's02', 's03', 's04', 's05'],
+      located_at_seconds: 40, located: firstFix,
+      picks_processed_at_seconds: [30, 40, null, 35, 90],
+    })
+
+    expect([...__test.sceneAt([partly], 36, 600).busySensors.keys()].sort()).toEqual(['s02', 's03', 's05'])
+    expect([...__test.sceneAt([partly], 45, 600).busySensors.keys()].sort()).toEqual(['s03', 's05'])
+  })
+
+  // A run recorded before pick times has only the event's own times to go on.
+  it('falls back to the whole event for a run that did not record pick times', () => {
+    const older = event({ sequence: 8, origin_seconds: 10, sensors: ['s01', 's02'], picks_processed_at_seconds: null })
+    expect(__test.sceneAt([older], 20, 600).busySensors.size).toBe(2)
+  })
+
   it('lets old located events go but never an event still waiting', () => {
     const late = __test.sceneAt(events, 2000, 600)
     expect(late.visible.map((v) => v.event.sequence)).toEqual([2])
@@ -281,5 +301,84 @@ describe('whether a residual says anything', () => {
 
   it('does once there is a pick more than the unknowns', () => {
     expect(__test.residualMeaningful({ ...firstFix, picks: 5 })).toBe(true)
+  })
+})
+
+describe('people and vehicles', () => {
+  const walker: Entity = {
+    id: 'person-01', kind: 'person',
+    track: [[10, 0, 0, -500], [110, 100, 0, -500], [400, 100, 0, -500], [500, 100, 100, -500]],
+  }
+
+  it('are where their track puts them, moving between waypoints and still at a stop', () => {
+    expect(__test.entityAt(walker, 60)).toEqual({ x: 50, y: 0, z: -500 })
+    expect(__test.entityAt(walker, 250)).toEqual({ x: 100, y: 0, z: -500 })
+    expect(__test.entityAt(walker, 450)).toEqual({ x: 100, y: 50, z: -500 })
+  })
+
+  it('hold their first and last positions outside their track', () => {
+    expect(__test.entityAt(walker, 0)).toEqual({ x: 0, y: 0, z: -500 })
+    expect(__test.entityAt(walker, 99999)).toEqual({ x: 100, y: 100, z: -500 })
+  })
+})
+
+// Risk in the view follows the backend's rule exactly: someone is at a level
+// when they are within that level's zone around a location the mine has. The
+// zones already carry the allowance for location error, so nothing is added
+// here, and a second copy of the physics in the browser cannot drift from the
+// first.
+describe('who is at risk at a moment', () => {
+  const hazardous = (overrides: Partial<SeismicEvent>) => event({
+    origin_seconds: 100, located_at_seconds: 130, processed_at_seconds: 200,
+    located: { at: { x: 0, y: 0, z: -500 }, rms_residual_seconds: 0, picks: 4, zones: { moderate: 400, high: 120 } },
+    final: { at: { x: 20, y: 0, z: -500 }, rms_residual_seconds: 0, picks: 12, zones: { moderate: 380, high: 100, 'very-high': 40 } },
+    ...overrides,
+  })
+  const at = (x: number): Entity => ({ id: `p-${x}`, kind: 'person', track: [[0, x, 0, -500]] })
+
+  it('puts someone at the highest level whose zone they are inside', () => {
+    const scene = __test.sceneAt([hazardous({})], 150, 600)
+    const risk = __test.riskAt(scene, [at(90), at(300), at(500)], 150)
+
+    expect(risk.get('p-90')?.level).toBe('high')
+    expect(risk.get('p-300')?.level).toBe('moderate')
+    expect(risk.has('p-500')).toBe(false)
+  })
+
+  it('judges from the location the mine has at that moment, first or final', () => {
+    const final = __test.riskAt(__test.sceneAt([hazardous({})], 250, 600), [at(50), at(115)], 250)
+    expect(final.get('p-50')?.level).toBe('very-high')
+    expect(final.get('p-115')?.level).toBe('high') // 95 m from the final location
+  })
+
+  it('puts nobody at risk from an event the mine has not located', () => {
+    const scene = __test.sceneAt([hazardous({ located_at_seconds: null, located: null, processed_at_seconds: null, final: null })], 150, 600)
+    expect(__test.riskAt(scene, [at(0)], 150).size).toBe(0)
+  })
+
+  it('takes the worst of several events', () => {
+    const near = hazardous({ sequence: 2 })
+    const far = hazardous({ sequence: 3, located: { at: { x: 1000, y: 0, z: -500 }, rms_residual_seconds: 0, picks: 4, zones: { moderate: 2000 } } })
+    const risk = __test.riskAt(__test.sceneAt([far, near], 150, 600), [at(90)], 150)
+    expect(risk.get('p-90')).toEqual({ level: 'high', event: 2 })
+  })
+
+  it('counts who is at each level', () => {
+    const risk = __test.riskAt(__test.sceneAt([hazardous({})], 250, 600), [at(10), at(90), at(300), at(900)], 250)
+    expect(__test.riskCounts(risk)).toEqual({ 'very-high': 1, high: 1, moderate: 1 })
+  })
+})
+
+// The simulator's answer: who was really exposed by events that happened
+// recently, whether or not the mine has located them yet.
+describe('who was really exposed', () => {
+  it('takes the truth recorded at each event that has happened within the window', () => {
+    const events = [
+      event({ sequence: 1, origin_seconds: 100, exposed: [{ entity: 'person-01', level: 'high', ppv_mps: 0.3, distance_m: 40 }] }),
+      event({ sequence: 2, origin_seconds: 900, exposed: [{ entity: 'person-02', level: 'moderate', ppv_mps: 0.02, distance_m: 400 }] }),
+      event({ sequence: 3, origin_seconds: 5000, exposed: [{ entity: 'person-03', level: 'very-high', ppv_mps: 2, distance_m: 5 }] }),
+    ]
+    const truth = __test.trulyExposedAt(events, 1000, 600)
+    expect([...truth.entries()]).toEqual([['person-02', { level: 'moderate', event: 2 }]])
   })
 })

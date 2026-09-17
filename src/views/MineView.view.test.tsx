@@ -36,6 +36,7 @@ function show() {
   vi.stubGlobal('EventSource', QuietEventSource)
   vi.spyOn(api, 'run').mockResolvedValue(completed)
   vi.spyOn(api, 'cycles').mockResolvedValue({ cycles: [], next: 0 })
+  vi.spyOn(api, 'entities').mockResolvedValue([])
   // WebGL is only asked for when a scene is built; stop jsdom logging that it
   // has no canvas implementation for every test that gets that far.
   vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null)

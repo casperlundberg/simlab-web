@@ -63,3 +63,21 @@ export function priorityLabel(priority: string): string {
   const name = PRIORITY_NAMES[priority]
   return name ? `P${priority} ${name}` : `P${priority}`
 }
+
+const ENTITY_KINDS: [prefix: string, name: string][] = [
+  ['autonomous-vehicle-', 'Autonomous'],
+  ['crewed-vehicle-', 'Crewed vehicle'],
+  ['person-', 'Person'],
+]
+
+/** A person or vehicle as an operator would name it: "Person 3" rather than
+ *  "person-03". */
+export function entityName(id: string): string {
+  for (const [prefix, name] of ENTITY_KINDS) {
+    if (id.startsWith(prefix)) {
+      const number = Number(id.slice(prefix.length))
+      if (Number.isInteger(number)) return `${name} ${number}`
+    }
+  }
+  return id
+}

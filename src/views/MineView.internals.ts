@@ -1,4 +1,4 @@
-import type { Cycle, Layout, Location, Point, SeismicEvent } from '../api/types'
+import type { Cycle, Entity, Layout, Location, Point, RiskLevel, SeismicEvent } from '../api/types'
 
 /**
  * What the virtual mine shows at a moment in a run.
@@ -79,7 +79,7 @@ export interface VisibleEvent {
 export interface SceneAt {
   visible: VisibleEvent[]
   counts: { happened: number; awaiting: number; located: number; unlocatable: number }
-  /** Sensors with an event not yet fully processed, and how many. */
+  /** Sensors with a pick not yet processed, and how many they are waiting on. */
   busySensors: Map<string, number>
   /** Over every event located by t, in seconds from origin to location. */
   timeToLocate: { median: number; max: number } | null
@@ -110,9 +110,13 @@ export function sceneAt(events: SeismicEvent[], t: number, window: number): Scen
     if (state === 'located' || state === 'processed') counts.located++
     if (state === 'unlocatable') counts.unlocatable++
 
-    if (state === 'awaiting' || state === 'located') {
-      for (const sensor of event.sensors) busySensors.set(sensor, (busySensors.get(sensor) ?? 0) + 1)
-    }
+    const picks = event.picks_processed_at_seconds
+    event.sensors.forEach((sensor, i) => {
+      // Each pick's own time when it was recorded; the event's otherwise,
+      // for runs recorded before pick times were.
+      const done = picks ? picks[i] ?? null : event.processed_at_seconds
+      if (done === null || done > t) busySensors.set(sensor, (busySensors.get(sensor) ?? 0) + 1)
+    })
     if (event.located_at_seconds !== null && event.located_at_seconds <= t) {
       delays.push(event.located_at_seconds - event.origin_seconds)
     }
@@ -250,6 +254,100 @@ export function nearestWithin(
   return best
 }
 
+/** Where a person or vehicle is at t: interpolated along its track, and held
+ *  at its first or last waypoint outside it. */
+export function entityAt(entity: Entity, t: number): Point {
+  const track = entity.track
+  const first = track[0]
+  const last = track.at(-1)
+  if (!first || !last) return { x: 0, y: 0, z: 0 }
+  if (t <= first[0]) return { x: first[1], y: first[2], z: first[3] }
+  if (t >= last[0]) return { x: last[1], y: last[2], z: last[3] }
+
+  // The last waypoint at or before t.
+  let low = 0
+  let high = track.length - 1
+  while (low < high) {
+    const middle = (low + high + 1) >> 1
+    if (track[middle]![0] <= t) low = middle
+    else high = middle - 1
+  }
+  const a = track[low]!
+  const b = track[low + 1] ?? a
+  const span = b[0] - a[0]
+  const f = span > 0 ? (t - a[0]) / span : 1
+  return { x: a[1] + (b[1] - a[1]) * f, y: a[2] + (b[2] - a[2]) * f, z: a[3] + (b[3] - a[3]) * f }
+}
+
+/** Levels of ground motion, weakest first. */
+export const RISK_LEVELS: RiskLevel[] = ['moderate', 'high', 'very-high']
+
+const rank = (level: RiskLevel) => RISK_LEVELS.indexOf(level)
+
+export interface Risk {
+  level: RiskLevel
+  /** The event whose zone it is. */
+  event: number
+}
+
+/**
+ * Who is at risk at t, by the mine's own estimates: for each person or vehicle,
+ * the highest level whose zone they are inside, around any location in the
+ * scene.
+ *
+ * The zones come from the backend and already carry its allowance for location
+ * error, so this only measures distance against them. The ground-motion law is
+ * not written again here, and so cannot come to disagree with the one that
+ * judged exposure when the run was recorded.
+ */
+export function riskAt(scene: SceneAt, entities: Entity[], t: number): Map<string, Risk> {
+  const out = new Map<string, Risk>()
+  const located = scene.visible.filter((v) => v.position?.zones)
+  if (!located.length) return out
+
+  for (const entity of entities) {
+    const where = entityAt(entity, t)
+    for (const { event, position } of located) {
+      const at = position!.at
+      const distance = Math.hypot(where.x - at.x, where.y - at.y, where.z - at.z)
+      for (const level of [...RISK_LEVELS].reverse()) {
+        const radius = position!.zones![level]
+        if (radius === undefined || distance > radius) continue
+        const current = out.get(entity.id)
+        if (!current || rank(level) > rank(current.level)) out.set(entity.id, { level, event: event.sequence })
+        break
+      }
+    }
+  }
+  return out
+}
+
+/** How many are at each level. */
+export function riskCounts(risk: Map<string, Risk>): Record<RiskLevel, number> {
+  const counts: Record<RiskLevel, number> = { 'very-high': 0, high: 0, moderate: 0 }
+  for (const { level } of risk.values()) counts[level]++
+  return counts
+}
+
+/**
+ * Who was really exposed by events that happened in the window before t: the
+ * simulator's judgement at each event, from where it really was. Independent of
+ * whether the mine has located them, which is the point of comparing the two.
+ */
+export function trulyExposedAt(events: SeismicEvent[], t: number, window: number): Map<string, Risk> {
+  const out = new Map<string, Risk>()
+  for (const event of events) {
+    if (event.origin_seconds > t || t - event.origin_seconds > window) continue
+    for (const exposure of event.exposed ?? []) {
+      const current = out.get(exposure.entity)
+      if (!current || rank(exposure.level) > rank(current.level)) {
+        out.set(exposure.entity, { level: exposure.level, event: event.sequence })
+      }
+    }
+  }
+  return out
+}
+
 /** Scenario time as h:mm:ss. */
 export function clock(seconds: number): string {
   const whole = Math.max(0, Math.floor(seconds))
@@ -262,4 +360,5 @@ export function clock(seconds: number): string {
 export const __test = {
   SCENE_SIZE, toScene, stateAt, positionAt, errorMetres, sceneAt,
   scenarioSeconds, cycleAt, endOf, busiestMoment, isClick, nearestWithin, residualMeaningful, clock,
+  entityAt, riskAt, riskCounts, trulyExposedAt,
 }

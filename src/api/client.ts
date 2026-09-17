@@ -1,6 +1,6 @@
 import { getToken, notifyTokenRejected } from './token'
 import type {
-  Cycle, Layout, Metrics, Mine, PlatformSchema, Run, RunDetail, RunListing,
+  Cycle, Entity, Layout, Metrics, Mine, PlatformSchema, Run, RunDetail, RunListing,
   Scenario, SeismicEvent, SettingsSnapshot, TargetSnapshot, TargetStatus,
 } from './types'
 
@@ -88,6 +88,10 @@ export const api = {
   /** Seismic events after `from`, paged like cycles. */
   seismicity: (id: string, from = 0) =>
     request<{ events: SeismicEvent[]; next: number }>(`/api/runs/${id}/seismicity?from=${from}`),
+
+  /** The people and vehicles underground during a run. */
+  entities: (id: string) =>
+    request<{ entities: Entity[] }>(`/api/runs/${id}/entities`).then((r) => r.entities),
 
   platforms: () =>
     request<{ platforms: PlatformSchema[] }>('/api/platforms').then((r) => r.platforms),
