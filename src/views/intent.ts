@@ -28,7 +28,7 @@ export const DEFAULT_INTENT: IntentSettings = {
   promote_level: 'high',
   margin_m: 0,
   location_uncertainty_m: 50,
-  decay_to: 0,
+  decay_to: -1,
   promote_to: 400,
   deadline_from: 'arrival',
   restore: true,
