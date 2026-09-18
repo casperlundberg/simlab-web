@@ -3,6 +3,11 @@
 Every release, newest first. `make release` will not tag a version without a
 section here, so the tag message and this file always agree.
 
+## 1.1.1 — 2026-09-18
+
+- A new run's intent form starts with decay going below every level work is
+  submitted at, as simlab-api 3.0.0 now does.
+
 ## 1.1.0 — 2026-09-17
 
 Alongside simlab-api 2.0.0 and autoscaler 1.1.0.
