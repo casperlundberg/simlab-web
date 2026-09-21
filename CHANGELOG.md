@@ -3,6 +3,25 @@
 Every release, newest first. `make release` will not tag a version without a
 section here, so the tag message and this file always agree.
 
+## 2.0.0 — unreleased
+
+MAJOR: a new run's form sends the settings autoscaler 2.0 takes, and autoscaler
+1.x refuses them.
+
+- **Scale-down windows on a new run.** The form offers
+  `local_scale_down_window_seconds` and `cloud_scale_down_window_seconds` in
+  place of `scale_down_cooldown_seconds`, which autoscaler 2.0 refuses, and
+  describes the cloud minimum lifetime as per executor.
+- **Priority levels are named by their number.** Names from pipeline stages fit
+  one job mix only. P−1, beneath everything submitted, is still named
+  "decayed", in intent's colour for decayed work.
+- **A chart of what arrives, by level**, beside the charts of what waits. Work
+  served the cycle it arrives never waits, so the queue charts all but hid it.
+- **The time slider sits under the mine**, as wide as the canvas and still
+  while the panel beside it changes, and the mine links back to its run's data.
+- A development build is named after the release this file says it leads to —
+  this section makes them 2.0.0-dev — rather than the next patch.
+
 ## 1.1.1 — 2026-09-18
 
 - A new run's intent form starts with decay going below every level work is
