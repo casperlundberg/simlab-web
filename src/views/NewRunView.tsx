@@ -15,8 +15,9 @@ const TUNABLES = [
   { key: 'cloud_executor_cap', label: 'Cloud cap', hint: 'A spend ceiling. Set it to 0 to see what on-premise alone can do.' },
   { key: 'min_local_executors', label: 'On-premise floor', hint: 'Kept warm even with an empty queue, so the next job does not pay a coldstart.' },
   { key: 'safety_factor', label: 'Safety factor', hint: 'Headroom on the requirement, covering error in the throughput estimate. 1.0 is none.', step: '0.05' },
-  { key: 'scale_down_cooldown_seconds', label: 'Scale-down cooldown (s)', hint: 'Long, usually: reclaiming executors too eagerly means paying coldstart again minutes later.' },
-  { key: 'cloud_min_lifetime_seconds', label: 'Cloud minimum lifetime (s)', hint: 'Cloud is billed from the moment it is requested, so churning it through a lull is the expensive way to ride out a burst.' },
+  { key: 'local_scale_down_window_seconds', label: 'On-premise scale-down window (s)', hint: 'How long on-premise capacity must go unwanted before it is given back. Long, usually: it is already paid for, and a warm executor answers the next burst.' },
+  { key: 'cloud_scale_down_window_seconds', label: 'Cloud scale-down window (s)', hint: 'The same for cloud, which is billed by the minute, so usually shorter.' },
+  { key: 'cloud_min_lifetime_seconds', label: 'Cloud minimum lifetime (s)', hint: 'Each cloud executor is kept this long from its own request, so a brief lull cannot churn capacity already paid for.' },
   { key: 'local_coldstart_seconds', label: 'On-premise coldstart (s)', hint: 'How long a new executor takes before it can take work.' },
   { key: 'cloud_coldstart_seconds', label: 'Cloud coldstart (s)', hint: 'Usually longer than on-premise.' },
 ]
