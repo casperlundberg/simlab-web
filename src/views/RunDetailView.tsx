@@ -11,7 +11,7 @@ import {
 import { useRunCycles } from '../state/useRunCycles'
 import type { Cycle } from '../api/types'
 import {
-  buildComposition, buildTimeline, sameComposition, totalDepth, type Composition,
+  buildArrivals, buildComposition, buildTimeline, sameComposition, totalDepth, type Composition,
 } from './RunDetailView.internals'
 import { cssVar, priorityToken } from '../components/theme'
 import { describeBuild, reproduceCommand } from '../components/provenance'
@@ -39,6 +39,7 @@ export function RunDetailView() {
   const timeline = useMemo(() => buildTimeline(cycles), [cycles])
   const submitted = useMemo(() => buildComposition(cycles, 'submitted'), [cycles])
   const current = useMemo(() => buildComposition(cycles, 'current'), [cycles])
+  const arrivals = useMemo(() => buildArrivals(cycles), [cycles])
   const intent = useMemo(() => intentSeries(cycles), [cycles])
   const run = detail.data?.run
   const metrics = detail.data?.metrics
@@ -143,6 +144,32 @@ export function RunDetailView() {
             { label: 'breaches (cumulative)', values: timeline.breaches, colour: cssVar('--danger') },
           ]}
         />
+      </div>
+
+      <div className="card">
+        <div className="card-head">
+          <h2>Arriving, by priority</h2>
+          <span className="faint">Including work served before it ever waits, which the queue charts cannot show</span>
+        </div>
+        {arrivals.levels.length === 0 ? (
+          <div className="empty">Nothing had arrived yet.</div>
+        ) : (
+          <Chart
+            x={timeline.elapsed}
+            height={180}
+            yLabel="jobs/s"
+            stacked
+            series={arrivals.levels.map((level) => ({
+              label: priorityLabel(level),
+              values: arrivals.rates[level] ?? [],
+              colour: cssVar(priorityToken(level)),
+            }))}
+          />
+        )}
+        <p className="faint chart-note">
+          Counted at the priority each job was submitted with, over the trailing window the
+          autoscaler is shown.
+        </p>
       </div>
 
       <div className="card">

@@ -108,6 +108,37 @@ export function buildComposition(cycles: Cycle[], basis: Basis): Composition {
   return { recorded, levels, depths }
 }
 
+export interface Arrivals {
+  /** Levels that ever had work arriving, most urgent first. */
+  levels: string[]
+  /** Jobs a second arriving at each level, one entry per cycle. */
+  rates: Record<string, number[]>
+}
+
+/**
+ * The work arriving at each level, cycle by cycle.
+ *
+ * The queue charts show only what waits, and work served the cycle it arrives
+ * never waits: on the recorded rock burst P100 waited in 13 cycles of 240 and
+ * arrived in 234, so it all but vanished from them. The arrival rate is
+ * recorded whether or not anything waited, and is counted at the priority work
+ * was submitted with.
+ */
+export function buildArrivals(cycles: Cycle[]): Arrivals {
+  const seen = new Set<string>()
+  for (const cycle of cycles) {
+    for (const [level, snapshot] of Object.entries(cycle.queues ?? {})) {
+      if (snapshot.arrival_rate_per_second > 0) seen.add(level)
+    }
+  }
+  const levels = [...seen].sort((a, b) => Number(b) - Number(a))
+  const rates: Record<string, number[]> = {}
+  for (const level of levels) {
+    rates[level] = cycles.map((cycle) => cycle.queues?.[level]?.arrival_rate_per_second ?? 0)
+  }
+  return { levels, rates }
+}
+
 /** Whether two compositions describe the queue identically. */
 export function sameComposition(a: Composition, b: Composition): boolean {
   if (a.levels.join('|') !== b.levels.join('|')) return false
@@ -118,4 +149,4 @@ export function sameComposition(a: Composition, b: Composition): boolean {
   })
 }
 
-export const __test = { buildTimeline, totalDepth, buildComposition, stack, sameComposition }
+export const __test = { buildTimeline, totalDepth, buildComposition, stack, sameComposition, buildArrivals }

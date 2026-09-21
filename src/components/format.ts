@@ -49,19 +49,20 @@ export function clockTime(iso?: string): string {
   return at.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' })
 }
 
-/** The priority levels this workload uses, named for what they mean in
- *  seismic processing. */
+/** Levels named for what they mean in every run. Only one qualifies: the
+ *  level beneath everything submitted, which only decayed work reaches. The
+ *  pipeline stages are not levels — every job is a pick whose priority the
+ *  scenario's mix drew — so naming P50 "locate" showed locate jobs where a
+ *  scenario had none, and P0 is pick work on the calibrated day. Stage names
+ *  belong to a scenario that really runs the stages, and should come from it. */
 const PRIORITY_NAMES: Record<string, string> = {
-  '400': 'relocate',
-  '100': 'associate',
-  '50': 'locate',
-  '25': 'pick',
-  '0': 'decayed',
+  '-1': 'decayed',
 }
 
 export function priorityLabel(priority: string): string {
+  const shown = priority.replace(/^-/, '\u2212')
   const name = PRIORITY_NAMES[priority]
-  return name ? `P${priority} ${name}` : `P${priority}`
+  return name ? `P${shown} ${name}` : `P${shown}`
 }
 
 const ENTITY_KINDS: [prefix: string, name: string][] = [

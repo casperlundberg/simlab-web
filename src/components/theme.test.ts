@@ -89,3 +89,14 @@ describe('the colour a priority level wears', () => {
     expect(priorityToken('9000')).toBe('--priority-1')
   })
 })
+
+describe('colouring a priority level', () => {
+  // Decayed work sits beneath everything submitted. Sharing the lowest
+  // level's colour, it was indistinguishable from pick work at P0 in the
+  // stacked chart — the very collision decaying below the floor exists to
+  // avoid. It takes intent's own colour for decayed work instead.
+  it('gives decayed work the colour intent uses for it, not the lowest level\'s', () => {
+    expect(priorityToken('-1')).toBe('--intent-decayed')
+    expect(priorityToken('0')).not.toBe(priorityToken('-1'))
+  })
+})

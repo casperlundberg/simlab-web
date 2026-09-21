@@ -148,3 +148,35 @@ describe('the queue composition', () => {
       __test.buildComposition(moved, 'current'), __test.buildComposition(moved, 'submitted'))).toBe(false)
   })
 })
+
+describe('arrivals by level', () => {
+  const rate = (rates: Record<string, number>) => Object.fromEntries(
+    Object.entries(rates).map(([level, r]) => [level, { depth: 0, oldest_job_age_seconds: 0, arrival_rate_per_second: r }]))
+
+  // Work served the cycle it arrives never waits, so the queue charts cannot
+  // show it; P100 on the recorded rock burst waited in 13 of 240 cycles and
+  // arrived in 234. The arrival rate is recorded either way.
+  it('shows a level that arrived but never waited', () => {
+    const arrivals = __test.buildArrivals([cycle({ queues: rate({ '100': 0.06, '25': 0.12 }) })])
+
+    expect(arrivals.levels).toEqual(['100', '25'])
+    expect(arrivals.rates['100']).toEqual([0.06])
+  })
+
+  it('orders levels by number and counts a missing level as zero', () => {
+    const arrivals = __test.buildArrivals([
+      cycle({ queues: rate({ '25': 1 }) }),
+      cycle({ queues: rate({ '100': 2, '25': 1 }) }),
+    ])
+
+    expect(arrivals.levels).toEqual(['100', '25'])
+    expect(arrivals.rates['100']).toEqual([0, 2])
+  })
+
+  it('leaves out a level with nothing arriving, however much waits there', () => {
+    const decayed = { '-1': { depth: 40, oldest_job_age_seconds: 300, arrival_rate_per_second: 0 } }
+    const arrivals = __test.buildArrivals([cycle({ queues: { ...rate({ '25': 1 }), ...decayed } })])
+
+    expect(arrivals.levels).toEqual(['25'])
+  })
+})

@@ -30,11 +30,16 @@ describe('formatting', () => {
     expect(executorHours(7200)).toBe('2.0')
   })
 
-  it('names a priority level so the table is readable without a legend', () => {
-    expect(priorityLabel('100')).toBe('P100 associate')
-    expect(priorityLabel('25')).toBe('P25 pick')
-    // A level the workload invented still renders, just without a name.
-    expect(priorityLabel('7')).toBe('P7')
+  // A level's number is all a run says about it: every job is a pick whose
+  // priority the scenario's mix drew, so naming P50 "locate" invented locate
+  // jobs where the scenario had none, and P0 is pick work on the calibrated
+  // day. Only the level beneath everything submitted means the same in every
+  // run.
+  it('names a level only where the name holds in every run', () => {
+    expect(priorityLabel('100')).toBe('P100')
+    expect(priorityLabel('50')).toBe('P50')
+    expect(priorityLabel('0')).toBe('P0')
+    expect(priorityLabel('-1')).toBe('P\u22121 decayed')
   })
 })
 

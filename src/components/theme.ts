@@ -52,6 +52,10 @@ export function withAlpha(colour: string, alpha: number): string {
  */
 export function priorityToken(priority: string): string {
   const level = Number(priority)
+  // P−1 is beneath everything submitted, where decayed work goes; sharing the
+  // lowest level's colour hid it among the picks at P0. Other negative levels
+  // are work a scenario submitted there, and keep the ordinary scale.
+  if (level === -1) return '--intent-decayed'
   if (level >= 400) return '--priority-1'
   if (level >= 100) return '--priority-2'
   if (level >= 50) return '--priority-3'
