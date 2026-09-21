@@ -189,6 +189,7 @@ export function MineView() {
         </p>
       </div>
       <div className="row">
+        <Link className="button" to={`/runs/${run.id}`}>Run data</Link>
         <StatusBadge status={run.status} active={active} />
         {active ? <LiveDot connected={connected} /> : null}
       </div>
@@ -230,88 +231,139 @@ export function MineView() {
       {seismicity.error ? <div className="error-banner">{(seismicity.error as Error).message}</div> : null}
 
       <div className="mine-grid">
-        <div className="card mine-stage">
-          {layout.data && webgl ? (
-            <MineScene
-              layout={layout.data}
-              scene={scene}
-              t={now}
-              entities={entities}
-              risk={risk}
-              trueRisk={trueRisk}
-              showZones={showZones}
-              showTruth={showTruth}
-              intentStates={intentStates}
-              reach={reach}
-              routes={routes}
-              selected={selected}
-              onSelect={setSelected}
-              onUnavailable={() => setWebgl(false)}
-              theme={theme}
-            />
-          ) : null}
-          {!webgl ? (
-            <div className="empty mine-unavailable">
-              This browser could not start WebGL, so the mine cannot be drawn. Everything
-              beside it is still current.
-            </div>
-          ) : null}
-          {!layout.data && webgl ? <div className="empty mine-unavailable">Loading the mine…</div> : null}
-
-          <div className="mine-toolbar">
-            <label className="row" htmlFor="mine-zones">
-              <input id="mine-zones" type="checkbox" checked={showZones} onChange={(e) => setShowZones(e.target.checked)} />
-              Hazard zones
-            </label>
-            {intentNow ? (
-              <>
-                <label className="row" htmlFor="mine-reach">
-                  <input id="mine-reach" type="checkbox" checked={showReach} onChange={(e) => setShowReach(e.target.checked)} />
-                  Intent reach
-                </label>
-                <label className="row" htmlFor="mine-routes">
-                  <input id="mine-routes" type="checkbox" checked={showRoutes} onChange={(e) => setShowRoutes(e.target.checked)} />
-                  Protected routes
-                </label>
-              </>
-            ) : null}
-            <label className="row" htmlFor="mine-truth">
-              <input
-                id="mine-truth"
-                type="checkbox"
-                checked={showTruth}
-                onChange={(e) => setShowTruth(e.target.checked)}
+        {/* The mine's own column: the slider below the canvas is exactly as wide
+            as it, and the panel beside it can grow or shrink during playback
+            without moving either. */}
+        <div className="mine-main">
+          <div className="card mine-stage">
+            {layout.data && webgl ? (
+              <MineScene
+                layout={layout.data}
+                scene={scene}
+                t={now}
+                entities={entities}
+                risk={risk}
+                trueRisk={trueRisk}
+                showZones={showZones}
+                showTruth={showTruth}
+                intentStates={intentStates}
+                reach={reach}
+                routes={routes}
+                selected={selected}
+                onSelect={setSelected}
+                onUnavailable={() => setWebgl(false)}
+                theme={theme}
               />
-              True epicentres
-            </label>
-            <label className="row" htmlFor="mine-window">
-              Keep located events
-              <select id="mine-window" value={String(keepFor)} onChange={(e) => setKeepFor(Number(e.target.value))}>
-                {WINDOWS.map((w) => <option key={w.label} value={String(w.seconds)}>{w.label}</option>)}
+            ) : null}
+            {!webgl ? (
+              <div className="empty mine-unavailable">
+                This browser could not start WebGL, so the mine cannot be drawn. Everything
+                beside it is still current.
+              </div>
+            ) : null}
+            {!layout.data && webgl ? <div className="empty mine-unavailable">Loading the mine…</div> : null}
+
+            <div className="mine-toolbar">
+              <label className="row" htmlFor="mine-zones">
+                <input id="mine-zones" type="checkbox" checked={showZones} onChange={(e) => setShowZones(e.target.checked)} />
+                Hazard zones
+              </label>
+              {intentNow ? (
+                <>
+                  <label className="row" htmlFor="mine-reach">
+                    <input id="mine-reach" type="checkbox" checked={showReach} onChange={(e) => setShowReach(e.target.checked)} />
+                    Intent reach
+                  </label>
+                  <label className="row" htmlFor="mine-routes">
+                    <input id="mine-routes" type="checkbox" checked={showRoutes} onChange={(e) => setShowRoutes(e.target.checked)} />
+                    Protected routes
+                  </label>
+                </>
+              ) : null}
+              <label className="row" htmlFor="mine-truth">
+                <input
+                  id="mine-truth"
+                  type="checkbox"
+                  checked={showTruth}
+                  onChange={(e) => setShowTruth(e.target.checked)}
+                />
+                True epicentres
+              </label>
+              <label className="row" htmlFor="mine-window">
+                Keep located events
+                <select id="mine-window" value={String(keepFor)} onChange={(e) => setKeepFor(Number(e.target.value))}>
+                  {WINDOWS.map((w) => <option key={w.label} value={String(w.seconds)}>{w.label}</option>)}
+                </select>
+              </label>
+            </div>
+
+            <ul className="mine-legend" aria-label="Legend">
+              <li><i className="dot sensor" aria-hidden="true" />Sensor</li>
+              <li><i className="dot busy" aria-hidden="true" />Sensor with picks waiting</li>
+              <li><i className="dot first" aria-hidden="true" />First location</li>
+              <li><i className="dot final" aria-hidden="true" />Final location</li>
+              {showTruth ? <li><i className="dot truth" aria-hidden="true" />True epicentre</li> : null}
+              <li><i className="dot person" aria-hidden="true" />Person</li>
+              <li><i className="dot crewed" aria-hidden="true" />Vehicle with crew</li>
+              <li><i className="dot autonomous" aria-hidden="true" />Autonomous vehicle</li>
+              <li><i className="dot ring" aria-hidden="true" />At risk: moderate, high, very high</li>
+              {intentNow ? (
+                <>
+                  <li><i className="dot intent-kept" aria-hidden="true" />Work kept</li>
+                  <li><i className="dot intent-decayed" aria-hidden="true" />Work decayed</li>
+                  <li><i className="dot intent-promoted" aria-hidden="true" />Work promoted</li>
+                  {showRoutes ? <li><i className="dot route" aria-hidden="true" />Protected route ahead</li> : null}
+                </>
+              ) : null}
+              {showTruth ? <li><i className="dot ring truth" aria-hidden="true" />Really exposed</li> : null}
+            </ul>
+          </div>
+          <div className="card scrubber">
+            <button
+              type="button"
+              className="primary"
+              onClick={() => {
+                if (!playing && now >= end) setT(0)
+                setPlaying(!playing)
+                setFollow(false)
+              }}
+              disabled={end <= 0}
+            >
+              {playing ? 'Pause' : 'Play'}
+            </button>
+            <label htmlFor="mine-time" className="visually-hidden">Moment in the run</label>
+            <input
+              id="mine-time"
+              type="range"
+              min={0}
+              max={Math.max(end, 1)}
+              step={1}
+              value={now}
+              onChange={(e) => {
+                setT(Number(e.target.value))
+                setFollow(false)
+              }}
+            />
+            <label className="row" htmlFor="mine-speed">
+              <select id="mine-speed" value={String(speed)} onChange={(e) => setSpeed(Number(e.target.value))}>
+                {SPEEDS.map((s) => <option key={s} value={String(s)}>{s}×</option>)}
               </select>
             </label>
-          </div>
-
-          <ul className="mine-legend" aria-label="Legend">
-            <li><i className="dot sensor" aria-hidden="true" />Sensor</li>
-            <li><i className="dot busy" aria-hidden="true" />Sensor with picks waiting</li>
-            <li><i className="dot first" aria-hidden="true" />First location</li>
-            <li><i className="dot final" aria-hidden="true" />Final location</li>
-            {showTruth ? <li><i className="dot truth" aria-hidden="true" />True epicentre</li> : null}
-            <li><i className="dot person" aria-hidden="true" />Person</li>
-            <li><i className="dot crewed" aria-hidden="true" />Vehicle with crew</li>
-            <li><i className="dot autonomous" aria-hidden="true" />Autonomous vehicle</li>
-            <li><i className="dot ring" aria-hidden="true" />At risk: moderate, high, very high</li>
-            {intentNow ? (
-              <>
-                <li><i className="dot intent-kept" aria-hidden="true" />Work kept</li>
-                <li><i className="dot intent-decayed" aria-hidden="true" />Work decayed</li>
-                <li><i className="dot intent-promoted" aria-hidden="true" />Work promoted</li>
-                {showRoutes ? <li><i className="dot route" aria-hidden="true" />Protected route ahead</li> : null}
-              </>
+            {active ? (
+              <label className="row" htmlFor="mine-follow">
+                <input
+                  id="mine-follow"
+                  type="checkbox"
+                  checked={follow}
+                  onChange={(e) => {
+                    setFollow(e.target.checked)
+                    if (e.target.checked) setPlaying(false)
+                  }}
+                />
+                Follow live
+              </label>
             ) : null}
-            {showTruth ? <li><i className="dot ring truth" aria-hidden="true" />Really exposed</li> : null}
-          </ul>
+          </div>
         </div>
 
         <aside className="mine-hud">
@@ -354,53 +406,6 @@ export function MineView() {
             <p className="faint mine-hint">Click an event in the mine to read it. Drag to turn the mine.</p>
           )}
         </aside>
-      </div>
-
-      <div className="card scrubber">
-        <button
-          type="button"
-          className="primary"
-          onClick={() => {
-            if (!playing && now >= end) setT(0)
-            setPlaying(!playing)
-            setFollow(false)
-          }}
-          disabled={end <= 0}
-        >
-          {playing ? 'Pause' : 'Play'}
-        </button>
-        <label htmlFor="mine-time" className="visually-hidden">Moment in the run</label>
-        <input
-          id="mine-time"
-          type="range"
-          min={0}
-          max={Math.max(end, 1)}
-          step={1}
-          value={now}
-          onChange={(e) => {
-            setT(Number(e.target.value))
-            setFollow(false)
-          }}
-        />
-        <label className="row" htmlFor="mine-speed">
-          <select id="mine-speed" value={String(speed)} onChange={(e) => setSpeed(Number(e.target.value))}>
-            {SPEEDS.map((s) => <option key={s} value={String(s)}>{s}×</option>)}
-          </select>
-        </label>
-        {active ? (
-          <label className="row" htmlFor="mine-follow">
-            <input
-              id="mine-follow"
-              type="checkbox"
-              checked={follow}
-              onChange={(e) => {
-                setFollow(e.target.checked)
-                if (e.target.checked) setPlaying(false)
-              }}
-            />
-            Follow live
-          </label>
-        ) : null}
       </div>
     </>
   )

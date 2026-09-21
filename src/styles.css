@@ -391,6 +391,10 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
   display: grid; gap: 14px; align-items: start;
   grid-template-columns: minmax(0, 1fr) 300px;
 }
+/* The canvas and its time slider share one column, so the slider is the
+   canvas's width and sits right under it whatever the panel beside is doing. */
+.mine-main { display: grid; gap: 14px; min-width: 0; }
+.mine-main .card + .card { margin-top: 0; }
 .mine-stage {
   position: relative; padding: 0; overflow: hidden;
   height: clamp(380px, 64vh, 780px);
@@ -465,7 +469,7 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 .tier-bar.local .planned { border: 1.5px dashed var(--local); }
 .tier-bar.cloud .planned { border: 1.5px dashed var(--cloud); }
 
-.scrubber { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-top: 14px; }
+.scrubber { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
 .scrubber input[type="range"] { flex: 1; min-width: 180px; padding: 0; accent-color: var(--accent); }
 .scrubber select { width: auto; }
 .scrubber input[type="checkbox"] { width: auto; }

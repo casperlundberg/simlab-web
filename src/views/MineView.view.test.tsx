@@ -82,4 +82,38 @@ describe('the virtual mine view', () => {
     expect(screen.getByText('Seismicity')).toBeInTheDocument()
     expect(screen.getByText('Events so far').nextElementSibling).toHaveTextContent('3')
   })
+
+  // The run page links here; without a way back, the browser's back button
+  // was the only route to the charts.
+  it('links back to the run\'s data', async () => {
+    withAMine()
+    show()
+
+    const back = await screen.findByRole('link', { name: 'Run data' })
+    expect(back).toHaveAttribute('href', '/runs/run-1')
+  })
+
+  // The slider sat below the whole grid, so it moved whenever the panel beside
+  // the mine grew or shrank during playback, and spanned the panel too. In the
+  // mine's own column it is exactly as wide as the canvas and stays under it.
+  // jsdom lays nothing out, so this pins the structure that guarantees it.
+  it('keeps the time slider in the mine\'s own column, directly under the canvas', async () => {
+    withAMine()
+    show()
+
+    const slider = await screen.findByLabelText('Moment in the run')
+    const column = slider.closest('.mine-main')
+    expect(column).not.toBeNull()
+    expect(column?.querySelector('.mine-stage')).not.toBeNull()
+    expect(column?.querySelector('.mine-hud')).toBeNull()
+    expect(column?.lastElementChild).toContainElement(slider)
+  })
 })
+
+function withAMine() {
+  vi.spyOn(api, 'runLayout').mockResolvedValue({
+    extent: { min: { x: 0, y: 0, z: -1000 }, max: { x: 1000, y: 1000, z: 0 } },
+    sensors: [{ id: 's01', at: { x: 10, y: 10, z: -10 } }],
+  })
+  vi.spyOn(api, 'seismicity').mockResolvedValue({ events: [event(1, true)], next: 1 })
+}
