@@ -12,6 +12,10 @@ check: ## Everything CI runs
 	npm run build
 	$(MAKE) scripts-test
 
+.PHONY: api-spec
+api-spec: ## Copy simlab-api's OpenAPI document in, which src/api/types.ts is held to
+	scripts/refresh-api-spec.sh
+
 .PHONY: version
 version: ## Print this checkout's semantic version
 	@scripts/version.sh

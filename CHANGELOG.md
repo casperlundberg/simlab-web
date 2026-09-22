@@ -16,6 +16,11 @@ MAJOR: the virtual mine asks simlab-api 4.0 for the ground intent protects
   moment shown — asked at the moment on screen when paused, and at steps of a
   decision cycle or a quarter-second of playback while playing.
 - "Protected routes" is now "Protected ground".
+- **The browser's types are held to simlab-api's API.** A copy of its OpenAPI
+  document lives in `api/`, stamped with the version it came from (`make
+  api-spec` refreshes it), and a test fails when a type in `src/api/types.ts`
+  declares a field the document does not have — or when a new type is neither
+  checked nor listed with the reason it is not.
 
 ## 2.0.0 — 2026-09-22
 

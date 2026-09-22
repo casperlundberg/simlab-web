@@ -90,6 +90,15 @@ Three sibling repositories: **simlab-api**, the backend this talks to;
 decisions; and **platform-deploy**, which composes all three into one
 namespace and documents what they need.
 
+## The API it is written against
+
+`src/api/types.ts` is written by hand from simlab-api's API, and held to it:
+`api/simlab-api.openapi.json` is a copy of simlab-api's OpenAPI document,
+stamped with the version it came from, and `src/api/types.contract.test.ts`
+fails when a type declares a field the document does not have. `make api-spec`
+refreshes the copy from the sibling checkout; refreshing it is a change to
+review, since it moves the API this build is written against.
+
 ## Versions
 
 Releases are [semantic versions](https://semver.org), tagged `vMAJOR.MINOR.PATCH`

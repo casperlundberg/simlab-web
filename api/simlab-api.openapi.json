@@ -1,0 +1,2752 @@
+{
+ "openapi": "3.1.0",
+ "info": {
+  "title": "Simlab",
+  "version": "1.0.0",
+  "description": "The backend of Simlab: a mining-workload simulation and emulation\napplication.\n\nSimlab drives **runs**. A run replays a seismic-processing workload and\nasks the real autoscaler what to do about it, cycle by cycle, storing every\nobservation and decision.\n\nTwo modes, differing only in which autoscaler target the run drives:\n\n- **simulation** \u2014 a target on the autoscaler's `simulation` platform.\n  Decisions are computed by the real decision engine and reported back;\n  nothing is provisioned; time is compressed. Simlab creates the target for\n  the run and removes it afterwards.\n- **live** \u2014 a target on real infrastructure. Simlab observes and records;\n  it never drives, because a second controller issuing decisions would be\n  two schedulers fighting over one fleet.\n\nThis service is also the only thing that talks to the autoscaler. The\n`/api/platforms`, `/api/targets` and `/api/targets/{id}/settings` endpoints\nstand in front of it, so a browser needs no credential: the autoscaler's\ntoken unlocks every platform credential it holds, and a token that reaches\na browser has been disclosed.\n\nDurations are seconds throughout.\n"
+ },
+ "servers": [
+  {
+   "url": "/"
+  }
+ ],
+ "tags": [
+  {
+   "name": "health"
+  },
+  {
+   "name": "mines",
+   "description": "The sites whose workloads are studied."
+  },
+  {
+   "name": "scenarios",
+   "description": "Workloads to replay. A scenario's seed is what makes two runs comparable."
+  },
+  {
+   "name": "runs",
+   "description": "Replaying a workload, and reading what happened."
+  },
+  {
+   "name": "autoscaler",
+   "description": "The live autoscaler, reached through this service."
+  }
+ ],
+ "paths": {
+  "/healthz": {
+   "get": {
+    "security": [],
+    "tags": [
+     "health"
+    ],
+    "summary": "Liveness probe",
+    "responses": {
+     "200": {
+      "description": "Alive.",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/readyz": {
+   "get": {
+    "security": [],
+    "tags": [
+     "health"
+    ],
+    "summary": "Readiness probe",
+    "description": "Fails while the database is unreachable, and reports how many runs are in flight.",
+    "responses": {
+     "200": {
+      "description": "Ready.",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object"
+        }
+       }
+      }
+     },
+     "503": {
+      "description": "The database is unreachable.",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/version": {
+   "get": {
+    "tags": [
+     "health"
+    ],
+    "summary": "Which builds this service and its autoscaler are",
+    "description": "What a run started now would record in its provenance. The autoscaler\nis null, with `autoscaler_error` saying why, when it cannot report its\nbuild.\n",
+    "responses": {
+     "200": {
+      "description": "The builds.",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "properties": {
+          "simlab_api": {
+           "$ref": "#/components/schemas/Build"
+          },
+          "autoscaler": {
+           "oneOf": [
+            {
+             "$ref": "#/components/schemas/Build"
+            },
+            {
+             "type": "null"
+            }
+           ]
+          },
+          "autoscaler_error": {
+           "type": "string"
+          }
+         }
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/mines": {
+   "get": {
+    "tags": [
+     "mines"
+    ],
+    "summary": "List mines",
+    "responses": {
+     "200": {
+      "description": "Every mine, by name.",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "properties": {
+          "mines": {
+           "type": "array",
+           "items": {
+            "$ref": "#/components/schemas/Mine"
+           }
+          }
+         }
+        }
+       }
+      }
+     }
+    }
+   },
+   "post": {
+    "tags": [
+     "mines"
+    ],
+    "summary": "Create or replace a mine",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/Mine"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Saved.",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Mine"
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     }
+    }
+   }
+  },
+  "/api/mines/{id}": {
+   "parameters": [
+    {
+     "$ref": "#/components/parameters/ID"
+    }
+   ],
+   "get": {
+    "tags": [
+     "mines"
+    ],
+    "summary": "Fetch a mine",
+    "responses": {
+     "200": {
+      "description": "The mine.",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Mine"
+        }
+       }
+      }
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     }
+    }
+   },
+   "put": {
+    "tags": [
+     "mines"
+    ],
+    "summary": "Replace a mine",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/Mine"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Saved.",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Mine"
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     }
+    }
+   },
+   "delete": {
+    "tags": [
+     "mines"
+    ],
+    "summary": "Delete a mine and its scenarios",
+    "responses": {
+     "204": {
+      "description": "Deleted."
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     }
+    }
+   }
+  },
+  "/api/scenarios": {
+   "get": {
+    "tags": [
+     "scenarios"
+    ],
+    "summary": "List scenarios",
+    "parameters": [
+     {
+      "name": "mine_id",
+      "in": "query",
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Scenarios.",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "properties": {
+          "scenarios": {
+           "type": "array",
+           "items": {
+            "$ref": "#/components/schemas/Scenario"
+           }
+          }
+         }
+        }
+       }
+      }
+     }
+    }
+   },
+   "post": {
+    "tags": [
+     "scenarios"
+    ],
+    "summary": "Create or replace a scenario",
+    "description": "A scenario with no `seed` is given one, because a scenario that cannot\nbe replayed identically makes every comparison drawn from it\nmeaningless.\n",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/Scenario"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Saved.",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Scenario"
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     }
+    }
+   }
+  },
+  "/api/scenarios/{id}": {
+   "parameters": [
+    {
+     "$ref": "#/components/parameters/ID"
+    }
+   ],
+   "get": {
+    "tags": [
+     "scenarios"
+    ],
+    "summary": "Fetch a scenario",
+    "responses": {
+     "200": {
+      "description": "The scenario.",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Scenario"
+        }
+       }
+      }
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     }
+    }
+   },
+   "put": {
+    "tags": [
+     "scenarios"
+    ],
+    "summary": "Replace a scenario",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/Scenario"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Saved.",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Scenario"
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     }
+    }
+   },
+   "delete": {
+    "tags": [
+     "scenarios"
+    ],
+    "summary": "Delete a scenario",
+    "description": "Runs that used it keep their results; their scenario reference is cleared.",
+    "responses": {
+     "204": {
+      "description": "Deleted."
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     }
+    }
+   }
+  },
+  "/api/runs": {
+   "get": {
+    "tags": [
+     "runs"
+    ],
+    "summary": "List runs, newest first",
+    "description": "Each entry carries `active`, which the database alone cannot answer: a\nprocess that was killed leaves a run stuck at `running` in the table.\n",
+    "parameters": [
+     {
+      "name": "status",
+      "in": "query",
+      "schema": {
+       "type": "string",
+       "enum": [
+        "pending",
+        "running",
+        "completed",
+        "failed",
+        "cancelled"
+       ]
+      }
+     },
+     {
+      "name": "limit",
+      "in": "query",
+      "schema": {
+       "type": "integer",
+       "default": 100,
+       "maximum": 500
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Runs.",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "properties": {
+          "runs": {
+           "type": "array",
+           "items": {
+            "type": "object",
+            "properties": {
+             "run": {
+              "$ref": "#/components/schemas/Run"
+             },
+             "active": {
+              "type": "boolean"
+             }
+            }
+           }
+          }
+         }
+        }
+       }
+      }
+     }
+    }
+   },
+   "post": {
+    "tags": [
+     "runs"
+    ],
+    "summary": "Start a run",
+    "description": "Returns as soon as the run is under way; it executes in the background\nand survives the tab that started it being closed.\n\nA simulation run gets an autoscaler target of its own, created with the\nrun and removed when it ends \u2014 including when it fails. A shared target\nwould start each run holding the previous run's executors.\n",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/RunRequest"
+       }
+      }
+     }
+    },
+    "responses": {
+     "202": {
+      "description": "Started.",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Run"
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "409": {
+      "description": "This run is already in flight.",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/runs/{id}": {
+   "parameters": [
+    {
+     "$ref": "#/components/parameters/ID"
+    }
+   ],
+   "get": {
+    "tags": [
+     "runs"
+    ],
+    "summary": "Fetch a run, with its metrics and the settings it ran under",
+    "responses": {
+     "200": {
+      "description": "The run.",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "properties": {
+          "run": {
+           "$ref": "#/components/schemas/Run"
+          },
+          "active": {
+           "type": "boolean"
+          },
+          "metrics": {
+           "$ref": "#/components/schemas/Metrics"
+          },
+          "settings": {
+           "type": "object"
+          },
+          "provenance": {
+           "$ref": "#/components/schemas/Provenance"
+          },
+          "reproducible": {
+           "type": "boolean",
+           "description": "Whether the run can be rebuilt and replayed from its provenance alone."
+          },
+          "not_reproducible_because": {
+           "type": "array",
+           "items": {
+            "type": "string"
+           }
+          }
+         }
+        }
+       }
+      }
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     }
+    }
+   },
+   "delete": {
+    "tags": [
+     "runs"
+    ],
+    "summary": "Delete a run and everything recorded for it",
+    "responses": {
+     "204": {
+      "description": "Deleted."
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "409": {
+      "description": "The run is still in flight; cancel it first.",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/runs/{id}/cancel": {
+   "parameters": [
+    {
+     "$ref": "#/components/parameters/ID"
+    }
+   ],
+   "post": {
+    "tags": [
+     "runs"
+    ],
+    "summary": "Stop a run",
+    "description": "Whatever it recorded before stopping stands, and it is marked cancelled rather than failed.",
+    "responses": {
+     "202": {
+      "description": "Stopping.",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object"
+        }
+       }
+      }
+     },
+     "409": {
+      "description": "The run is not in flight.",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/runs/{id}/cycles": {
+   "parameters": [
+    {
+     "$ref": "#/components/parameters/ID"
+    },
+    {
+     "name": "from",
+     "in": "query",
+     "description": "Return cycles after this sequence number, so a client follows a run without refetching its whole timeline.",
+     "schema": {
+      "type": "integer",
+      "default": 0
+     }
+    },
+    {
+     "name": "limit",
+     "in": "query",
+     "schema": {
+      "type": "integer",
+      "default": 5000,
+      "maximum": 20000
+     }
+    }
+   ],
+   "get": {
+    "tags": [
+     "runs"
+    ],
+    "summary": "A run's timeline",
+    "responses": {
+     "200": {
+      "description": "Cycles, in order, with the sequence to resume from.",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "properties": {
+          "cycles": {
+           "type": "array",
+           "items": {
+            "$ref": "#/components/schemas/Cycle"
+           }
+          },
+          "next": {
+           "type": "integer"
+          }
+         }
+        }
+       }
+      }
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     }
+    }
+   }
+  },
+  "/api/runs/{id}/metrics": {
+   "parameters": [
+    {
+     "$ref": "#/components/parameters/ID"
+    }
+   ],
+   "get": {
+    "tags": [
+     "runs"
+    ],
+    "summary": "What a run amounted to",
+    "responses": {
+     "200": {
+      "description": "Metrics.",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Metrics"
+        }
+       }
+      }
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     }
+    }
+   }
+  },
+  "/api/runs/{id}/layout": {
+   "parameters": [
+    {
+     "$ref": "#/components/parameters/ID"
+    }
+   ],
+   "get": {
+    "tags": [
+     "runs"
+    ],
+    "summary": "The sensor array a run's virtual mine was replayed against",
+    "description": "Recorded when the run started rather than read from the mine, which\ncan be edited afterwards: this is what the autoscaler was actually\ndeciding against.\n",
+    "responses": {
+     "200": {
+      "description": "The layout.",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "properties": {
+          "layout": {
+           "$ref": "#/components/schemas/Layout"
+          }
+         }
+        }
+       }
+      }
+     },
+     "404": {
+      "description": "No such run, or a run with no virtual mine \u2014 a live run, or one\nrecorded before mines were modelled. The message says which.\n",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/runs/{id}/seismicity": {
+   "parameters": [
+    {
+     "$ref": "#/components/parameters/ID"
+    },
+    {
+     "name": "from",
+     "in": "query",
+     "description": "Return events after this sequence number.",
+     "schema": {
+      "type": "integer",
+      "default": 0
+     }
+    },
+    {
+     "name": "limit",
+     "in": "query",
+     "schema": {
+      "type": "integer",
+      "default": 5000,
+      "maximum": 20000
+     }
+    }
+   ],
+   "get": {
+    "tags": [
+     "runs"
+    ],
+    "summary": "A run's seismic events, and when the mine could locate each one",
+    "description": "Every detected event is recorded as the run starts, unlocated, and\nupdated as its picks are processed. While a run is in flight, re-read\nthis rather than assuming an earlier read is still current.\n",
+    "responses": {
+     "200": {
+      "description": "Events, in order, with the sequence to resume from.",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "properties": {
+          "events": {
+           "type": "array",
+           "items": {
+            "$ref": "#/components/schemas/SeismicEvent"
+           }
+          },
+          "next": {
+           "type": "integer"
+          }
+         }
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/runs/{id}/entities": {
+   "parameters": [
+    {
+     "$ref": "#/components/parameters/ID"
+    }
+   ],
+   "get": {
+    "tags": [
+     "runs"
+    ],
+    "summary": "The people and vehicles underground during a run, and where they went",
+    "description": "Recorded as the run starts. Not paged: a day of a whole workforce's\nmovement is a few megabytes, and a view needs all of it to move anyone.\n",
+    "responses": {
+     "200": {
+      "description": "Entities, by id.",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "properties": {
+          "entities": {
+           "type": "array",
+           "items": {
+            "$ref": "#/components/schemas/Entity"
+           }
+          }
+         }
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/runs/{id}/ground": {
+   "parameters": [
+    {
+     "$ref": "#/components/parameters/ID"
+    }
+   ],
+   "get": {
+    "tags": [
+     "runs"
+    ],
+    "summary": "The ground a run's planner protects at a moment",
+    "description": "For each protected unit, where it is or could be over the lookahead,\nas the knowledge asked for reads it \u2014 served from the views the run\nengine decides from, so a page drawing it draws what intent decided\nfrom. Under `estimate`, what the mine reads: each vehicle along its\nplanned route, each person along every stretch of tunnel they could\nwalk to. Under `truth`, every unit's true route. The lookahead, who is\nprotected and the knowledge are parameters rather than read from the\nrun, because intent can change mid-run; each is checked as an intent\npatch is, and defaults to the default intent's.\n",
+    "parameters": [
+     {
+      "name": "at_seconds",
+      "in": "query",
+      "required": true,
+      "schema": {
+       "type": "number",
+       "minimum": 0
+      }
+     },
+     {
+      "name": "lookahead_seconds",
+      "in": "query",
+      "schema": {
+       "type": "number",
+       "minimum": 0
+      }
+     },
+     {
+      "name": "protect",
+      "in": "query",
+      "description": "Comma-separated kinds of unit.",
+      "schema": {
+       "type": "string",
+       "example": "person,crewed-vehicle,autonomous-vehicle"
+      }
+     },
+     {
+      "name": "knowledge",
+      "in": "query",
+      "schema": {
+       "type": "string",
+       "enum": [
+        "estimate",
+        "truth"
+       ]
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "The protected ground, several paths for a unit that could go several ways.",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "properties": {
+          "at_seconds": {
+           "type": "number"
+          },
+          "knowledge": {
+           "type": "string"
+          },
+          "ground": {
+           "type": "array",
+           "items": {
+            "type": "object",
+            "properties": {
+             "entity": {
+              "type": "string"
+             },
+             "points": {
+              "type": "array",
+              "items": {
+               "$ref": "#/components/schemas/Point"
+              }
+             }
+            }
+           }
+          }
+         }
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     }
+    }
+   }
+  },
+  "/api/runs/{id}/use-cases": {
+   "parameters": [
+    {
+     "$ref": "#/components/parameters/ID"
+    }
+   ],
+   "post": {
+    "tags": [
+     "runs"
+    ],
+    "summary": "Score a run for a use case",
+    "description": "Every decision the case would have had to make in the run \u2014 whom it was\nfor, which event it waited on, when it opened and when it stopped being\nuseful \u2014 and whether what it needed arrived in time. Computed from what\nthe run stored and changing nothing, so any case can be asked of any\nrun, including one recorded before the case existed.\n\nCases: `turn-back` (a unit heading into an event's true zone is told\nbefore it enters, less its reaction time; with `kinds` set to the\nmachines, protecting machines), `way-out` (a unit inside the zone when\nit happens is led out before it would have left on its own) and\n`reroute` (a unit whose way runs into the zone is told before the last\njunction on the way in). All take `level` (moderate, high or very-high:\nthe ground motion that marks the zone, from the event's true\nmagnitude; moderate by default), `kinds`, `window_seconds` (1800) and\n`reaction_seconds` (30) and `need` (`first-location`, or `warning`: a\nlocation whose own zone reaches the unit). An unknown case or parameter\nis refused.\n",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "properties": {
+         "kind": {
+          "type": "string",
+          "enum": [
+           "reroute",
+           "turn-back",
+           "way-out"
+          ]
+         },
+         "params": {
+          "type": "object",
+          "properties": {
+           "level": {
+            "type": "string",
+            "enum": [
+             "moderate",
+             "high",
+             "very-high"
+            ]
+           },
+           "kinds": {
+            "type": "array",
+            "items": {
+             "type": "string",
+             "enum": [
+              "person",
+              "crewed-vehicle",
+              "autonomous-vehicle"
+             ]
+            }
+           },
+           "window_seconds": {
+            "type": "number",
+            "exclusiveMinimum": 0
+           },
+           "reaction_seconds": {
+            "type": "number",
+            "minimum": 0
+           },
+           "need": {
+            "type": "string",
+            "enum": [
+             "first-location",
+             "warning"
+            ],
+            "description": "What a decision waits on: any location of the event, or the first\nlocation whose own zone reaches the point that matters.\n"
+           }
+          }
+         }
+        },
+        "required": [
+         "kind"
+        ]
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "The decisions, how each went, and how they went together.",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "properties": {
+          "kind": {
+           "type": "string"
+          },
+          "params": {
+           "type": "object",
+           "description": "The parameters used",
+           "defaults filled in.": null
+          },
+          "summary": {
+           "type": "object",
+           "properties": {
+            "opportunities": {
+             "type": "integer"
+            },
+            "in_time": {
+             "type": "integer"
+            },
+            "never": {
+             "type": "integer",
+             "description": "Decisions whose need was never met."
+            },
+            "unwinnable": {
+             "type": "integer",
+             "description": "Decisions that closed no later than they opened."
+            },
+            "in_time_share": {
+             "type": "number",
+             "nullable": true
+            },
+            "latency_p50_seconds": {
+             "type": "number",
+             "nullable": true
+            },
+            "latency_p95_seconds": {
+             "type": "number",
+             "nullable": true
+            },
+            "slack_p50_seconds": {
+             "type": "number",
+             "nullable": true
+            }
+           }
+          },
+          "outcomes": {
+           "type": "array",
+           "items": {
+            "type": "object",
+            "properties": {
+             "event": {
+              "type": "integer",
+              "description": "The event's sequence."
+             },
+             "entity": {
+              "type": "string"
+             },
+             "need": {
+              "type": "string",
+              "enum": [
+               "first-location",
+               "final-location"
+              ]
+             },
+             "opens_seconds": {
+              "type": "number"
+             },
+             "closes_seconds": {
+              "type": "number"
+             },
+             "met_at_seconds": {
+              "type": "number",
+              "nullable": true
+             },
+             "in_time": {
+              "type": "boolean"
+             }
+            }
+           }
+          }
+         }
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     }
+    }
+   }
+  },
+  "/api/runs/{id}/intent": {
+   "parameters": [
+    {
+     "$ref": "#/components/parameters/ID"
+    }
+   ],
+   "get": {
+    "tags": [
+     "runs"
+    ],
+    "summary": "How a run's mine reorders its queued work, and every change to that",
+    "description": "`settings` and `version` are what is in force now: for a run in flight,\nthe live settings, which may be a change made since the last cycle and\nnot yet applied. `changes` is every version that took effect, with the\ncycle it took effect from; replaying them as `intent_schedule`\nreproduces the run.\n",
+    "responses": {
+     "200": {
+      "description": "The run's intent.",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "properties": {
+          "run_id": {
+           "type": "string"
+          },
+          "active": {
+           "type": "boolean",
+           "description": "Whether the run is in flight",
+           "and so whether its intent can still change.": null
+          },
+          "settings": {
+           "$ref": "#/components/schemas/IntentSettings"
+          },
+          "version": {
+           "type": "integer"
+          },
+          "schedule": {
+           "type": "array",
+           "items": {
+            "$ref": "#/components/schemas/IntentStep"
+           }
+          },
+          "changes": {
+           "type": "array",
+           "items": {
+            "$ref": "#/components/schemas/IntentChange"
+           }
+          }
+         }
+        }
+       }
+      }
+     },
+     "404": {
+      "description": "No such run, or a live run or one created before intent existed, which reordered nothing.",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    }
+   },
+   "patch": {
+    "tags": [
+     "runs"
+    ],
+    "summary": "Change an in-flight run's intent",
+    "description": "A patch onto the settings in force: fields not named keep their value,\nand a list named replaces the list. It takes effect from the run's next\ncycle, never part-way through one, and is recorded with that cycle so\nthe run can still be reproduced. Pass `expected_version` to make the\nwrite a compare-and-swap.\n",
+    "parameters": [
+     {
+      "name": "expected_version",
+      "in": "query",
+      "schema": {
+       "type": "integer"
+      }
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/IntentSettings"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Accepted; in force from the next cycle.",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "properties": {
+          "run_id": {
+           "type": "string"
+          },
+          "active": {
+           "type": "boolean"
+          },
+          "settings": {
+           "$ref": "#/components/schemas/IntentSettings"
+          },
+          "version": {
+           "type": "integer"
+          }
+         }
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "409": {
+      "description": "The run is not in flight",
+      "or the intent changed since the version being edited.": null,
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/runs/{id}/events": {
+   "parameters": [
+    {
+     "$ref": "#/components/parameters/ID"
+    }
+   ],
+   "get": {
+    "tags": [
+     "runs"
+    ],
+    "summary": "Watch one run as it happens",
+    "description": "Server-sent events. Event types are `status`, `cycle` and `metrics`.\n\nA watcher that falls behind loses events rather than slowing the run\ndown, so a client that reconnects should re-read the run's cycles from\n`/cycles?from=` rather than assuming the stream was complete.\n",
+    "responses": {
+     "200": {
+      "description": "An event stream.",
+      "content": {
+       "text/event-stream": {
+        "schema": {
+         "type": "string"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/events": {
+   "get": {
+    "tags": [
+     "runs"
+    ],
+    "summary": "Watch every run",
+    "responses": {
+     "200": {
+      "description": "An event stream.",
+      "content": {
+       "text/event-stream": {
+        "schema": {
+         "type": "string"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/platforms": {
+   "get": {
+    "tags": [
+     "autoscaler"
+    ],
+    "summary": "What the autoscaler can scale",
+    "description": "Passed through unchanged, so a client can render a registration form for a platform it was never written for.",
+    "responses": {
+     "200": {
+      "description": "Platforms.",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/targets": {
+   "get": {
+    "tags": [
+     "autoscaler"
+    ],
+    "summary": "List the autoscaler's targets",
+    "responses": {
+     "200": {
+      "description": "Targets.",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object"
+        }
+       }
+      }
+     }
+    }
+   },
+   "post": {
+    "tags": [
+     "autoscaler"
+    ],
+    "summary": "Register a target on real infrastructure",
+    "description": "Credentials go in and are never returned; the autoscaler redacts them.\nThey pass through this service and are not stored here.\n",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object"
+       }
+      }
+     }
+    },
+    "responses": {
+     "201": {
+      "description": "Registered.",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object"
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     }
+    }
+   }
+  },
+  "/api/targets/{id}": {
+   "parameters": [
+    {
+     "$ref": "#/components/parameters/ID"
+    }
+   ],
+   "get": {
+    "tags": [
+     "autoscaler"
+    ],
+    "summary": "Fetch a target",
+    "responses": {
+     "200": {
+      "description": "The target.",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object"
+        }
+       }
+      }
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     }
+    }
+   },
+   "delete": {
+    "tags": [
+     "autoscaler"
+    ],
+    "summary": "Remove a target",
+    "responses": {
+     "204": {
+      "description": "Removed."
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     }
+    }
+   }
+  },
+  "/api/targets/{id}/settings": {
+   "parameters": [
+    {
+     "$ref": "#/components/parameters/ID"
+    }
+   ],
+   "get": {
+    "tags": [
+     "autoscaler"
+    ],
+    "summary": "A target's live settings",
+    "responses": {
+     "200": {
+      "description": "Settings.",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object"
+        }
+       }
+      }
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     }
+    }
+   },
+   "patch": {
+    "tags": [
+     "autoscaler"
+    ],
+    "summary": "Change a live autoscaler's policy",
+    "description": "This is what makes the settings editor real rather than decorative: the\nchange reaches the running controller and is in force on its next\ndecision cycle.\n\nPass `expected_version` to make the write a compare-and-swap.\n",
+    "parameters": [
+     {
+      "name": "expected_version",
+      "in": "query",
+      "schema": {
+       "type": "integer",
+       "format": "int64"
+      }
+     },
+     {
+      "name": "X-Simlab-Actor",
+      "in": "header",
+      "description": "Carried through to the autoscaler's change log, so the change is attributable to a person rather than to \"simlab\".",
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Applied.",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object"
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "409": {
+      "description": "The settings changed since the version being edited.",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/targets/{id}/status": {
+   "parameters": [
+    {
+     "$ref": "#/components/parameters/ID"
+    }
+   ],
+   "get": {
+    "tags": [
+     "autoscaler"
+    ],
+    "summary": "A target's last decision",
+    "responses": {
+     "200": {
+      "description": "Status.",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object"
+        }
+       }
+      }
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     }
+    }
+   }
+  }
+ },
+ "security": [
+  {
+   "bearerAuth": []
+  }
+ ],
+ "components": {
+  "securitySchemes": {
+   "bearerAuth": {
+    "type": "http",
+    "scheme": "bearer",
+    "description": "Required on every endpoint except the probes.\n\nThis service is the one that is published \u2014 simlab-web's nginx proxies\n`/api` straight to it \u2014 and it holds the autoscaler's own token and\nproxies to it. An unauthenticated call here therefore reaches an\nauthenticated autoscaler, and through it whatever infrastructure a\nregistered target points at.\n\nSet `SIMLAB_API_TOKEN` to require it. Left empty the API is open, which\nonly suits a development install that nothing can reach.\n"
+   }
+  },
+  "parameters": {
+   "ID": {
+    "name": "id",
+    "in": "path",
+    "required": true,
+    "schema": {
+     "type": "string"
+    }
+   }
+  },
+  "responses": {
+   "BadRequest": {
+    "description": "The request cannot be carried out, with the reason given.",
+    "content": {
+     "application/json": {
+      "schema": {
+       "$ref": "#/components/schemas/Error"
+      }
+     }
+    }
+   },
+   "NotFound": {
+    "description": "No such thing.",
+    "content": {
+     "application/json": {
+      "schema": {
+       "$ref": "#/components/schemas/Error"
+      }
+     }
+    }
+   }
+  },
+  "schemas": {
+   "Error": {
+    "type": "object",
+    "properties": {
+     "error": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "error"
+    ]
+   },
+   "Mine": {
+    "type": "object",
+    "properties": {
+     "id": {
+      "type": "string",
+      "example": "storhall"
+     },
+     "name": {
+      "type": "string"
+     },
+     "sensors": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "How many seismic sensors the site runs. It sets the scale of\neverything downstream: more sensors means more picks per event, and\nmore picks means more jobs.\n"
+     },
+     "background_rate_per_hour": {
+      "type": "number",
+      "description": "Events per hour when nothing unusual is happening."
+     },
+     "layout": {
+      "$ref": "#/components/schemas/Layout",
+      "description": "Where the sensors are. Optional: a mine that states none gets one\nderived from its sensor count and id, the same in every scenario.\nWhen stated it must place exactly `sensors` sensors, each inside\nits extent.\n"
+     },
+     "description": {
+      "type": "string"
+     },
+     "created_at": {
+      "type": "string",
+      "format": "date-time"
+     }
+    },
+    "required": [
+     "id",
+     "name",
+     "sensors"
+    ]
+   },
+   "Point": {
+    "type": "object",
+    "description": "A position in metres. `z` is elevation against the surface datum, so\nunderground is negative and the -500 level is at z = -500.\n",
+    "properties": {
+     "x": {
+      "type": "number"
+     },
+     "y": {
+      "type": "number"
+     },
+     "z": {
+      "type": "number"
+     }
+    },
+    "required": [
+     "x",
+     "y",
+     "z"
+    ]
+   },
+   "Layout": {
+    "type": "object",
+    "properties": {
+     "extent": {
+      "type": "object",
+      "description": "The volume of rock, as an axis-aligned box. Events happen and are located inside it.",
+      "properties": {
+       "min": {
+        "$ref": "#/components/schemas/Point"
+       },
+       "max": {
+        "$ref": "#/components/schemas/Point"
+       }
+      }
+     },
+     "sensors": {
+      "type": "array",
+      "items": {
+       "type": "object",
+       "properties": {
+        "id": {
+         "type": "string"
+        },
+        "at": {
+         "$ref": "#/components/schemas/Point"
+        }
+       }
+      }
+     },
+     "tunnels": {
+      "type": "array",
+      "description": "The excavations. Optional on a stated layout; a derived one always\nhas them, with its sensors installed in them. Tunnels join where\nthey share a vertex exactly.\n",
+      "items": {
+       "$ref": "#/components/schemas/Tunnel"
+      }
+     }
+    }
+   },
+   "Tunnel": {
+    "type": "object",
+    "properties": {
+     "id": {
+      "type": "string",
+      "example": "L600-crosscut-2"
+     },
+     "kind": {
+      "type": "string",
+      "description": "shaft, ramp, drive, crosscut, ore-drive or access"
+     },
+     "path": {
+      "type": "array",
+      "minItems": 2,
+      "items": {
+       "$ref": "#/components/schemas/Point"
+      }
+     }
+    }
+   },
+   "Entity": {
+    "type": "object",
+    "properties": {
+     "id": {
+      "type": "string",
+      "example": "person-03"
+     },
+     "kind": {
+      "type": "string",
+      "enum": [
+       "person",
+       "crewed-vehicle",
+       "autonomous-vehicle"
+      ]
+     },
+     "track": {
+      "type": "array",
+      "description": "Waypoints as [seconds, x, y, z], in time order. Between two, the\nentity moves in a straight line at constant speed; two in a row at\none position are a stop. Outside the track it holds its first or\nlast position.\n",
+      "items": {
+       "type": "array",
+       "items": {
+        "type": "number"
+       },
+       "minItems": 4,
+       "maxItems": 4
+      }
+     }
+    }
+   },
+   "Exposure": {
+    "type": "object",
+    "description": "One person or vehicle within reach of an event.",
+    "properties": {
+     "entity": {
+      "type": "string"
+     },
+     "level": {
+      "type": "string",
+      "enum": [
+       "moderate",
+       "high",
+       "very-high"
+      ]
+     },
+     "ppv_mps": {
+      "type": "number",
+      "description": "Predicted peak particle velocity where they were."
+     },
+     "distance_m": {
+      "type": "number"
+     }
+    }
+   },
+   "Location": {
+    "type": "object",
+    "description": "A location the mine solved from picks.",
+    "properties": {
+     "at": {
+      "$ref": "#/components/schemas/Point"
+     },
+     "rms_residual_seconds": {
+      "type": "number",
+      "description": "The arrival-time error the solution could not explain \u2014 how far to trust it."
+     },
+     "picks": {
+      "type": "integer",
+      "description": "How many detections it was solved from."
+     },
+     "magnitude": {
+      "type": [
+       "number",
+       "null"
+      ],
+      "description": "The mine's estimate (Nuttli mN), the mean of the same picks' amplitude readings."
+     },
+     "zones": {
+      "type": "object",
+      "additionalProperties": {
+       "type": "number"
+      },
+      "description": "For each level of ground motion the event can reach (moderate, high,\nvery-high), how far from this location it extends, in metres,\nwidened by the 50 m the mine allows a location to be out. From the\nCanadian Rockburst Support Handbook's design scaling law,\nppv = C*\u00b7\u221a(10^(mN+1))/R with C* = 0.25 m\u00b2/s, held at its value at\nthe near-field limit.\n"
+     },
+     "exposed": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/Exposure"
+      },
+      "description": "Who the mine judged exposed from this location, where they were when it had it."
+     }
+    }
+   },
+   "SeismicEvent": {
+    "type": "object",
+    "properties": {
+     "run_id": {
+      "type": "string"
+     },
+     "sequence": {
+      "type": "integer"
+     },
+     "origin_seconds": {
+      "type": "number",
+      "description": "When it happened",
+      "from the start of the scenario.": null
+     },
+     "burst": {
+      "type": [
+       "integer",
+       "null"
+      ],
+      "description": "The index of the scenario burst it belongs to; null for background activity."
+     },
+     "magnitude": {
+      "type": [
+       "number",
+       "null"
+      ],
+      "description": "How large it really was (Nuttli mN). Ground truth, like `truth`."
+     },
+     "exposed": {
+      "type": [
+       "array",
+       "null"
+      ],
+      "items": {
+       "$ref": "#/components/schemas/Exposure"
+      },
+      "description": "Who it really exposed, where they were when it happened. The simulator's answer."
+     },
+     "truth": {
+      "$ref": "#/components/schemas/Point",
+      "description": "Where it really happened. Known to the simulator and to nothing\nelse: the mine never reads it, and it is here so an estimate can be\ncompared with what it estimated.\n"
+     },
+     "sensors": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      },
+      "description": "The sensors that detected it, first arrival first. Each is one pick job."
+     },
+     "located_at_seconds": {
+      "type": [
+       "number",
+       "null"
+      ],
+      "description": "When enough of its picks had been processed to locate it. Null until then."
+     },
+     "located": {
+      "oneOf": [
+       {
+        "$ref": "#/components/schemas/Location"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "The first location, solved from the picks processed by then."
+     },
+     "processed_at_seconds": {
+      "type": [
+       "number",
+       "null"
+      ],
+      "description": "When every one of its picks had been processed."
+     },
+     "final": {
+      "oneOf": [
+       {
+        "$ref": "#/components/schemas/Location"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "The location solved from every pick. Null for an event too few sensors saw."
+     },
+     "picks_processed_at_seconds": {
+      "type": [
+       "array",
+       "null"
+      ],
+      "items": {
+       "type": [
+        "number",
+        "null"
+       ]
+      },
+      "description": "When each pick was processed, in the order of `sensors`; null for\none still waiting. Null as a whole for an event recorded before this\nwas tracked.\n"
+     },
+     "intent": {
+      "type": [
+       "array",
+       "null"
+      ],
+      "items": {
+       "$ref": "#/components/schemas/IntentTransition"
+      },
+      "description": "Every change of mind the mine's intent had about this event's work,\nin order. The state at a moment is the last transition at or before\nit; before the first, the work kept its submitted priority. Null for\nan event recorded before intent was.\n"
+     }
+    }
+   },
+   "Burst": {
+    "type": "object",
+    "description": "A seismic event that floods the queue. This is the reason the system\nexists: ordinary monitoring is steady and easy to provision for, while\na rock burst produces an hour of work in a minute and keeps producing\naftershocks for hours.\n",
+    "properties": {
+     "at_seconds": {
+      "type": "number",
+      "description": "How far into the scenario the main event happens."
+     },
+     "magnitude": {
+      "type": "number",
+      "description": "How far above background the rate spikes at the instant of the event."
+     },
+     "aftershock_decay_seconds": {
+      "type": "number",
+      "description": "The timescale of the Omori-law aftershock tail. Zero means the\nevent subsides at once, which makes recovery far easier than it is\nin practice.\n"
+     },
+     "epicentre": {
+      "$ref": "#/components/schemas/Point",
+      "description": "Where in the rock it happens; its aftershocks cluster around it.\nOptional, and drawn from the seed when absent. Must lie inside the\nmine, or the scenario is refused when saved.\n"
+     },
+     "main_magnitude": {
+      "type": "number",
+      "description": "The Nuttli magnitude of the burst's main shock, its first event.\nDefaults to 2.5. Not the same as `magnitude`, which scales the\nevent rate.\n"
+     }
+    },
+    "required": [
+     "at_seconds",
+     "magnitude"
+    ]
+   },
+   "Scenario": {
+    "type": "object",
+    "properties": {
+     "id": {
+      "type": "string"
+     },
+     "mine_id": {
+      "type": "string"
+     },
+     "name": {
+      "type": "string"
+     },
+     "duration_seconds": {
+      "type": "number"
+     },
+     "job_seconds": {
+      "type": "number",
+      "description": "How long one job occupies an executor, before per-job variation."
+     },
+     "pick_jitter_seconds": {
+      "type": "number",
+      "minimum": 0,
+      "description": "The standard deviation of pick error: how far a sensor's reported\narrival is from the true one. It is the dial that sets how\nuncertain the mine's locations are, and turning it moves no event\nand no job.\n"
+     },
+     "workforce": {
+      "type": "object",
+      "description": "Who is underground. Omit for the default (8 people, 4 crewed and 3\nautonomous vehicles); a stated one of zeroes means nobody. Moves no\nevent and no job.\n",
+      "properties": {
+       "people": {
+        "type": "integer",
+        "minimum": 0
+       },
+       "crewed_vehicles": {
+        "type": "integer",
+        "minimum": 0
+       },
+       "autonomous_vehicles": {
+        "type": "integer",
+        "minimum": 0
+       }
+      }
+     },
+     "pipeline": {
+      "$ref": "#/components/schemas/Pipeline"
+     },
+     "seed": {
+      "type": "integer",
+      "format": "int64",
+      "description": "Two runs of one scenario replay exactly the same jobs, which is\nwhat makes comparing two autoscaler settings a controlled\nexperiment rather than an anecdote. Generated if omitted.\n"
+     },
+     "priority_mix": {
+      "type": "object",
+      "additionalProperties": {
+       "type": "number"
+      },
+      "description": "Relative weights per priority level. They need not sum to anything.",
+      "example": {
+       "100": 1,
+       "50": 1,
+       "25": 2
+      }
+     },
+     "bursts": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/Burst"
+      }
+     },
+     "description": {
+      "type": "string"
+     },
+     "created_at": {
+      "type": "string",
+      "format": "date-time"
+     }
+    },
+    "required": [
+     "mine_id",
+     "duration_seconds",
+     "job_seconds",
+     "priority_mix"
+    ]
+   },
+   "Pipeline": {
+    "type": "object",
+    "description": "The mine's own three-stage workflow \u2014 pick, associate, locate \u2014 rather\nthan one undifferentiated stream of jobs. Omit it and the scenario\ngenerates picks alone at the priorities `priority_mix` states, as every\nscenario did before. With one, each stage states its own priority and\ncost; `priority_mix` and `job_seconds` are still drawn from, so the\nsame seed produces the same seismic events with and without it. An\nevent is located when its locate job finishes, not when its fourth pick\ndoes.\n",
+    "properties": {
+     "sweep": {
+      "type": "object",
+      "description": "When the mine runs an associate sweep.",
+      "properties": {
+       "kind": {
+        "type": "string",
+        "enum": [
+         "fixed",
+         "when-drained",
+         "just-in-time",
+         "adaptive"
+        ],
+        "description": "fixed sweeps on a timer, as production does; when-drained waits\nfor the backlog to clear; just-in-time waits only for the picks\nthe mine believes matter; adaptive aims to sweep as the backlog\nis predicted to clear.\n"
+       },
+       "every_seconds": {
+        "type": "number",
+        "description": "The interval of a fixed trigger."
+       },
+       "deadline_seconds": {
+        "type": "number",
+        "minimum": 0,
+        "description": "How long when-drained and just-in-time will wait at most."
+       },
+       "min_seconds": {
+        "type": "number",
+        "description": "The adaptive trigger's lower bound."
+       },
+       "max_seconds": {
+        "type": "number",
+        "description": "The adaptive trigger's upper bound."
+       },
+       "pressure": {
+        "type": "object",
+        "description": "Sweep early, never later, once this many picks are ready.",
+        "properties": {
+         "backlog": {
+          "type": "integer",
+          "minimum": 1
+         },
+         "floor_seconds": {
+          "type": "number",
+          "description": "Stops it firing every cycle once over the threshold."
+         }
+        },
+        "required": [
+         "backlog"
+        ]
+       }
+      },
+      "required": [
+       "kind"
+      ]
+     },
+     "window_seconds": {
+      "type": "number",
+      "exclusiveMinimum": 0,
+      "description": "How far back a sweep looks; an event older than this is finished with."
+     },
+     "pick": {
+      "$ref": "#/components/schemas/Stage"
+     },
+     "locate": {
+      "$ref": "#/components/schemas/Stage"
+     },
+     "associate": {
+      "type": "object",
+      "description": "What a sweep is worth and costs \u2014 a fixed part and a part per locate it emits.",
+      "properties": {
+       "priority": {
+        "type": "integer"
+       },
+       "seconds": {
+        "type": "number",
+        "exclusiveMinimum": 0
+       },
+       "per_locate": {
+        "type": "number",
+        "minimum": 0
+       }
+      },
+      "required": [
+       "seconds"
+      ]
+     }
+    },
+    "required": [
+     "sweep",
+     "window_seconds",
+     "pick",
+     "associate",
+     "locate"
+    ]
+   },
+   "Stage": {
+    "type": "object",
+    "properties": {
+     "priority": {
+      "type": "integer"
+     },
+     "seconds": {
+      "type": "number",
+      "exclusiveMinimum": 0,
+      "description": "Nominal execution time, before per-job variation."
+     }
+    },
+    "required": [
+     "seconds"
+    ]
+   },
+   "RunRequest": {
+    "type": "object",
+    "properties": {
+     "name": {
+      "type": "string"
+     },
+     "mode": {
+      "type": "string",
+      "enum": [
+       "simulation",
+       "live"
+      ]
+     },
+     "scenario_id": {
+      "type": "string",
+      "description": "Required for a simulation run; there is nothing to replay without one."
+     },
+     "target_id": {
+      "type": "string",
+      "description": "The autoscaler target for a live run. A simulation run leaves this\nempty and gets a target of its own.\n"
+     },
+     "decision_interval_seconds": {
+      "type": "number",
+      "default": 15,
+      "description": "Should match the target's own setting, or the run measures a different controller from the one deployed."
+     },
+     "time_compression": {
+      "type": "number",
+      "default": 600,
+      "description": "Simulated seconds per real second, so a run can be watched while it\nhappens. Very large values mean \"as fast as it will go\".\n"
+     },
+     "settings": {
+      "type": "object",
+      "description": "The autoscaler settings this run is executed under. This is how one\nscenario is replayed under different policies \u2014 the comparison the\nwhole application exists to make.\n"
+     },
+     "intent": {
+      "$ref": "#/components/schemas/IntentSettings",
+      "description": "How the mine reorders its queued work, as a patch onto the default:\ndecay only, from estimates. A simulation run only.\n"
+     },
+     "intent_schedule": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/IntentStep"
+      },
+      "description": "Changes to intent planned for later cycles, applied in order."
+     }
+    },
+    "required": [
+     "mode"
+    ]
+   },
+   "Build": {
+    "type": "object",
+    "description": "Which code a service was built from.",
+    "properties": {
+     "version": {
+      "type": "string",
+      "description": "Semantic version: a release such as 1.3.0, or a development build\nsuch as 1.3.1-dev.2+abc1234 (\".dirty\" when built with uncommitted\nchanges). Empty when not stamped.\n"
+     },
+     "commit": {
+      "type": "string",
+      "description": "Full commit hash; empty when unknown."
+     },
+     "modified": {
+      "type": "boolean",
+      "description": "Built with changes the commit does not contain."
+     },
+     "go_version": {
+      "type": "string"
+     },
+     "platform": {
+      "type": "string",
+      "description": "GOOS/GOARCH, e.g. linux/amd64."
+     }
+    }
+   },
+   "Provenance": {
+    "type": "object",
+    "description": "What a run was produced by and from, recorded as it began: enough to\nrebuild both services at their commits and replay the run. The inputs\nare copies, not references, because a scenario can be edited after it\nwas replayed and settings defaults change between autoscaler versions.\n",
+    "properties": {
+     "recorded_at": {
+      "type": "string",
+      "format": "date-time"
+     },
+     "simlab_api": {
+      "$ref": "#/components/schemas/Build"
+     },
+     "autoscaler": {
+      "oneOf": [
+       {
+        "$ref": "#/components/schemas/Build"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "mine": {
+      "$ref": "#/components/schemas/Mine"
+     },
+     "scenario": {
+      "$ref": "#/components/schemas/Scenario"
+     },
+     "settings": {
+      "type": "object",
+      "description": "The target's whole effective settings as the run began, not only the patch the run asked for."
+     },
+     "settings_version": {
+      "type": "integer",
+      "format": "int64"
+     },
+     "intent": {
+      "type": "object",
+      "description": "The intent the run was created with. Absent for a run that predates intent, which reordered nothing.",
+      "properties": {
+       "settings": {
+        "$ref": "#/components/schemas/IntentSettings"
+       },
+       "schedule": {
+        "type": "array",
+        "items": {
+         "$ref": "#/components/schemas/IntentStep"
+        }
+       }
+      }
+     }
+    }
+   },
+   "IntentSettings": {
+    "type": "object",
+    "description": "How the mine reorders work it has already queued. What is protected is\nthe union, over every protected person and vehicle, of where it is and\nwhere its planned route takes it over the lookahead. An event whose\nhazard zone at `protect_level` reaches none of that decays; one whose\nzone at `promote_level` reaches it can be promoted. Distances are\nthree-dimensional.\n",
+    "properties": {
+     "mode": {
+      "type": "string",
+      "enum": [
+       false,
+       "decay",
+       "promote",
+       "both"
+      ],
+      "default": "decay",
+      "description": "Decay only relaxes, so it cannot trigger scaling that would not have happened anyway."
+     },
+     "knowledge": {
+      "type": "string",
+      "enum": [
+       "estimate",
+       "truth"
+      ],
+      "default": "estimate",
+      "description": "The mine's solved locations, or the simulator's ground truth from the moment an event happens \u2014 the oracle arm no real mine has."
+     },
+     "pre_location": {
+      "type": "boolean",
+      "default": false,
+      "description": "Act before an event is located, taking the first sensor to trigger as its position and the distance to the fourth as how far out that may be."
+     },
+     "pre_location_magnitude": {
+      "type": "number",
+      "default": 1.5,
+      "description": "The magnitude assumed before one is estimated."
+     },
+     "protect": {
+      "type": "array",
+      "items": {
+       "type": "string",
+       "enum": [
+        "person",
+        "crewed-vehicle",
+        "autonomous-vehicle"
+       ]
+      },
+      "description": "The kinds of entity whose safety decides what is important. Default all three."
+     },
+     "lookahead_seconds": {
+      "type": "number",
+      "default": 300,
+      "description": "How far along its planned route an entity is protected. Zero protects only where things are now."
+     },
+     "protect_level": {
+      "type": "string",
+      "enum": [
+       "moderate",
+       "high",
+       "very-high"
+      ],
+      "default": "moderate"
+     },
+     "promote_level": {
+      "type": "string",
+      "enum": [
+       "moderate",
+       "high",
+       "very-high"
+      ],
+      "default": "high"
+     },
+     "margin_m": {
+      "type": "number",
+      "default": 0,
+      "description": "Metres added to every reach."
+     },
+     "location_uncertainty_m": {
+      "type": "number",
+      "default": 50,
+      "description": "How far a location may be out; zones are widened by it."
+     },
+     "decay_to": {
+      "type": "integer",
+      "default": -1,
+      "description": "The level decayed work moves to. Decay never raises a job. It\nbelongs below every level work is submitted at: sharing a level\nwith submitted work puts relaxed work in front of the work of the\nevents intent chose to protect.\n"
+     },
+     "promote_to": {
+      "type": "integer",
+      "default": 400,
+      "description": "The level promoted work moves to. Promotion never lowers one."
+     },
+     "deadline_from": {
+      "type": "string",
+      "enum": [
+       "arrival",
+       "change"
+      ],
+      "default": "arrival",
+      "description": "What a moved job's deadline is measured from. From arrival, a\npromotion can never hide how long a job waited \u2014 and a job promoted\npast its new deadline is late at once, which is a reason to scale\nhard unless it is exempt from cloud burst.\n"
+     },
+     "restore": {
+      "type": "boolean",
+      "default": true,
+      "description": "Whether decayed work returns to its submitted priority when\nsomething protected comes within reach. Without it decay is final\n\u2014 a pure relaxation. With it and deadlines from arrival, restored\nwork is often already late, which is a reason to scale hard unless\nit is exempt.\n"
+     },
+     "burst_exempt": {
+      "type": "array",
+      "items": {
+       "type": "string",
+       "enum": [
+        "decayed",
+        "promoted",
+        "restored"
+       ]
+      },
+      "default": [
+       "restored"
+      ],
+      "description": "Jobs, by what intent did to them, that may use capacity but may not\nbe the reason cloud capacity is bought. Restored is back at its\nsubmitted priority after being moved. They are still served, and\nstill counted as breaches when late.\n"
+     }
+    }
+   },
+   "IntentStep": {
+    "type": "object",
+    "properties": {
+     "cycle": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "The first cycle the change is in force for."
+     },
+     "settings": {
+      "$ref": "#/components/schemas/IntentSettings"
+     },
+     "version": {
+      "type": "integer",
+      "description": "The version to record it as",
+      "when replaying a recorded change.": null
+     },
+     "source": {
+      "type": "string",
+      "description": "What to record as having made it",
+      "when replaying a recorded change.": null
+     }
+    },
+    "required": [
+     "cycle",
+     "settings"
+    ]
+   },
+   "IntentChange": {
+    "type": "object",
+    "description": "Intent as it was from one cycle of a run onwards.",
+    "properties": {
+     "version": {
+      "type": "integer"
+     },
+     "cycle": {
+      "type": "integer"
+     },
+     "source": {
+      "type": "string",
+      "enum": [
+       "initial",
+       "schedule",
+       "operator"
+      ]
+     },
+     "settings": {
+      "$ref": "#/components/schemas/IntentSettings"
+     },
+     "recorded_at": {
+      "type": "string",
+      "format": "date-time"
+     }
+    }
+   },
+   "IntentTransition": {
+    "type": "object",
+    "description": "The mine's intent changing its mind about one event's work.",
+    "properties": {
+     "at_seconds": {
+      "type": "number"
+     },
+     "state": {
+      "type": "string",
+      "enum": [
+       "unknown",
+       "kept",
+       "decayed",
+       "promoted"
+      ]
+     },
+     "basis": {
+      "type": "string",
+      "enum": [
+       "location",
+       "sensors",
+       "truth",
+       "off"
+      ],
+      "description": "What it was judged from; \"off\" when intent was switched off."
+     },
+     "entity": {
+      "type": "string",
+      "description": "The protected entity whose path came nearest. Absent when nothing is protected."
+     },
+     "distance_m": {
+      "type": "number"
+     },
+     "reach_m": {
+      "type": "number",
+      "description": "How far the deciding level of ground motion reaches from the event."
+     }
+    }
+   },
+   "CycleIntent": {
+    "type": "object",
+    "description": "What intent had done to the queue at one cycle.",
+    "properties": {
+     "version": {
+      "type": "integer"
+     },
+     "decayed": {
+      "type": "integer",
+      "description": "Waiting jobs below the priority they were submitted with."
+     },
+     "promoted": {
+      "type": "integer",
+      "description": "Waiting jobs above it."
+     },
+     "exempt": {
+      "type": "integer",
+      "description": "Waiting jobs exempt from cloud burst."
+     },
+     "exempt_by_priority": {
+      "type": "object",
+      "additionalProperties": {
+       "type": "integer"
+      }
+     },
+     "changed": {
+      "type": "integer",
+      "description": "Jobs moved this cycle."
+     },
+     "too_late": {
+      "type": "integer",
+      "description": "Jobs intent would have moved had an executor not already started them."
+     }
+    }
+   },
+   "Run": {
+    "type": "object",
+    "properties": {
+     "id": {
+      "type": "string"
+     },
+     "name": {
+      "type": "string"
+     },
+     "scenario_id": {
+      "type": "string"
+     },
+     "target_id": {
+      "type": "string"
+     },
+     "mode": {
+      "type": "string",
+      "enum": [
+       "simulation",
+       "live"
+      ]
+     },
+     "status": {
+      "type": "string",
+      "enum": [
+       "pending",
+       "running",
+       "completed",
+       "failed",
+       "cancelled"
+      ]
+     },
+     "simulated_start": {
+      "type": "string",
+      "format": "date-time"
+     },
+     "time_compression": {
+      "type": "number"
+     },
+     "decision_interval_seconds": {
+      "type": "number",
+      "description": "Seconds, like every other duration in this API. A response can be\nsent straight back as a request without conversion.\n"
+     },
+     "started_at": {
+      "type": "string",
+      "format": "date-time"
+     },
+     "finished_at": {
+      "type": "string",
+      "format": "date-time"
+     },
+     "error": {
+      "type": "string"
+     },
+     "created_at": {
+      "type": "string",
+      "format": "date-time"
+     },
+     "built_with": {
+      "type": "object",
+      "description": "Which builds produced the run, from its provenance. Absent for a run recorded before provenance was.",
+      "properties": {
+       "simlab_api": {
+        "$ref": "#/components/schemas/Build"
+       },
+       "autoscaler": {
+        "oneOf": [
+         {
+          "$ref": "#/components/schemas/Build"
+         },
+         {
+          "type": "null"
+         }
+        ]
+       }
+      }
+     }
+    }
+   },
+   "QueueSnapshot": {
+    "type": "object",
+    "properties": {
+     "depth": {
+      "type": "integer"
+     },
+     "oldest_job_age_seconds": {
+      "type": "number"
+     },
+     "arrival_rate_per_second": {
+      "type": "number"
+     }
+    }
+   },
+   "Cycle": {
+    "type": "object",
+    "description": "One decision, with everything needed to explain it later: what the\nqueue looked like, what was running, what the autoscaler decided and\nwhy, and what actually happened in that interval.\n",
+    "properties": {
+     "run_id": {
+      "type": "string"
+     },
+     "sequence": {
+      "type": "integer"
+     },
+     "at": {
+      "type": "string",
+      "format": "date-time"
+     },
+     "queues": {
+      "type": "object",
+      "description": "The waiting work by the priority each job holds now, which is the order it will be served in.",
+      "additionalProperties": {
+       "$ref": "#/components/schemas/QueueSnapshot"
+      }
+     },
+     "depth_by_submitted_priority": {
+      "type": [
+       "object",
+       "null"
+      ],
+      "additionalProperties": {
+       "type": "integer"
+      },
+      "description": "The same waiting work counted by the priority each job was\nsubmitted at. It differs from `queues` only once something has\nchanged a priority after submission. Null for a cycle recorded\nbefore this was tracked, which is not the same as an empty queue.\n"
+     },
+     "local_ready": {
+      "type": "integer"
+     },
+     "cloud_ready": {
+      "type": "integer"
+     },
+     "local_pending": {
+      "type": "integer"
+     },
+     "cloud_pending": {
+      "type": "integer"
+     },
+     "action": {
+      "type": "string"
+     },
+     "plan_local": {
+      "type": "integer"
+     },
+     "plan_cloud": {
+      "type": "integer"
+     },
+     "reason": {
+      "type": "string"
+     },
+     "constraint": {
+      "type": "string"
+     },
+     "settings_version": {
+      "type": "integer",
+      "format": "int64"
+     },
+     "breach_expected": {
+      "type": "boolean",
+      "description": "What the autoscaler predicted. Comparing it with `breached` is the point of a run."
+     },
+     "breaches_exempt_only": {
+      "type": "boolean",
+      "description": "Every breach the autoscaler predicted was of work exempt from cloud burst \u2014 accepted rather than missed."
+     },
+     "intent": {
+      "oneOf": [
+       {
+        "$ref": "#/components/schemas/CycleIntent"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Null for a cycle recorded before intent was, or a live run."
+     },
+     "completed": {
+      "type": "integer"
+     },
+     "breached": {
+      "type": "integer",
+      "description": "Jobs that breached this interval: those still waiting past their\ndeadline, and those an executor picked up past it.\n"
+     }
+    }
+   },
+   "Metrics": {
+    "type": "object",
+    "description": "Chosen so two runs of one scenario under different settings are\ndirectly comparable on the only two questions that matter: did it hold\nthe SLA, and what did that cost.\n",
+    "properties": {
+     "run_id": {
+      "type": "string"
+     },
+     "jobs_submitted": {
+      "type": "integer"
+     },
+     "jobs_completed": {
+      "type": "integer"
+     },
+     "sla_breaches": {
+      "type": "integer",
+      "description": "Jobs whose wait exceeded the deadline of the level they were served at, measured from their deadline origin."
+     },
+     "sla_breaches_as_submitted": {
+      "type": "integer",
+      "description": "Jobs whose wait exceeded the deadline of the level they were submitted at, from submission \u2014 what decay cost against the SLA work arrived under."
+     },
+     "jobs_reprioritised": {
+      "type": "integer",
+      "description": "Jobs intent actually moved at least once."
+     },
+     "sweeps": {
+      "type": "integer",
+      "description": "Associate sweeps the mine's workflow submitted; 0 without a pipeline."
+     },
+     "locates": {
+      "type": "integer",
+      "description": "Locate jobs those sweeps emitted \u2014 the cost of how often events are re-located."
+     },
+     "breach_rate": {
+      "type": "number"
+     },
+     "mean_wait_seconds": {
+      "type": "number"
+     },
+     "p95_wait_seconds": {
+      "type": "number"
+     },
+     "max_wait_seconds": {
+      "type": "number"
+     },
+     "peak_queue_depth": {
+      "type": "integer"
+     },
+     "local_executor_seconds": {
+      "type": "number",
+      "description": "Charged on ready executors only; capacity that spent an interval starting up did no work."
+     },
+     "cloud_executor_seconds": {
+      "type": "number",
+      "description": "Kept separate because cloud is the tier that is actually billed."
+     },
+     "peak_local_executors": {
+      "type": "integer"
+     },
+     "peak_cloud_executors": {
+      "type": "integer"
+     },
+     "scaling_actions": {
+      "type": "integer"
+     },
+     "cycles": {
+      "type": "integer"
+     }
+    }
+   }
+  }
+ },
+ "x-vendored-from": "simlab-api 4.0.0-dev.13+ba89423"
+}
