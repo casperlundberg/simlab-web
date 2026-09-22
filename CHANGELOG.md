@@ -3,10 +3,10 @@
 Every release, newest first. `make release` will not tag a version without a
 section here, so the tag message and this file always agree.
 
-## 2.0.0 — unreleased
+## 2.0.0 — 2026-09-22
 
-MAJOR: a new run's form sends the settings autoscaler 2.0 takes, and autoscaler
-1.x refuses them.
+Alongside autoscaler 2.0.0. MAJOR: a new run's form sends the settings
+autoscaler 2.0 takes, and autoscaler 1.x refuses them.
 
 - **Scale-down windows on a new run.** The form offers
   `local_scale_down_window_seconds` and `cloud_scale_down_window_seconds` in
