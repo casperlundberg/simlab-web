@@ -1,3 +1,6 @@
+/// <reference types="node" />
+// A test that reads the API document from disk: Node's types for this file
+// alone, so the application's own code still cannot reach for them.
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import ts from 'typescript'
