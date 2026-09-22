@@ -1,8 +1,7 @@
 import type {
-  Cycle, Entity, EntityKind, IntentChange, IntentClass, IntentSettings, IntentState, IntentTransition,
+  Cycle, EntityKind, IntentChange, IntentClass, IntentSettings, IntentState, IntentTransition,
   Point, SeismicEvent,
 } from '../api/types'
-import { entityAt } from './MineView.internals'
 
 /**
  * Everything about intent that decides what the pages show or send.
@@ -152,29 +151,6 @@ export function intentCounts(events: SeismicEvent[], t: number): Record<IntentSt
     counts[judged?.state ?? 'unknown']++
   }
   return counts
-}
-
-/**
- * Where each protected entity is and is going over the lookahead from t: its
- * position now, every waypoint before the lookahead ends, and its position
- * then. The same path the backend measures distance to — drawn, it is the
- * ground intent is protecting.
- */
-export function protectedPaths(entities: Entity[], t: number, settings: IntentSettings): { entity: Entity; points: Point[] }[] {
-  if (settings.mode === 'off') return []
-  const until = t + settings.lookahead_seconds
-  return entities
-    .filter((entity) => settings.protect.includes(entity.kind) && entity.track.length > 0)
-    .map((entity) => {
-      const points = [entityAt(entity, t)]
-      if (settings.lookahead_seconds > 0) {
-        for (const [at, x, y, z] of entity.track) {
-          if (at > t && at < until) points.push({ x, y, z })
-        }
-        points.push(entityAt(entity, until))
-      }
-      return { entity, points }
-    })
 }
 
 export interface IntentSeries {

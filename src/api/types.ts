@@ -413,3 +413,12 @@ export interface RunEvent {
   metrics?: Metrics
   error?: string
 }
+
+/** The ground a run's planner protects at a moment: each protected unit's
+ *  paths — one for a vehicle's route, several for a person who could go
+ *  several ways. */
+export interface Ground {
+  at_seconds: number
+  knowledge: string
+  ground: { entity: string; points: Point[] }[]
+}

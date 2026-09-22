@@ -322,6 +322,27 @@ describe('people and vehicles', () => {
   })
 })
 
+// Playback moves the clock every frame; the ground is asked of the backend,
+// so it is asked at steps rather than every frame. Paused, it is the moment on
+// screen exactly — the frame someone studies is the one that must be right.
+describe('when to ask for the protected ground', () => {
+  it('asks at the moment on screen when paused', () => {
+    expect(__test.groundMoment(1234.56, 60, false)).toBe(1234.56)
+  })
+
+  it('asks once a decision cycle while playing slowly', () => {
+    expect(__test.groundMoment(1234.56, 10, true)).toBe(1230)
+    expect(__test.groundMoment(1244.99, 10, true)).toBe(1230)
+  })
+
+  it('asks about four times a second of real time while playing fast', () => {
+    // At 600x, a quarter of a second is 150 s of the run.
+    expect(__test.groundMoment(1234.56, 600, true)).toBe(1200)
+    expect(__test.groundMoment(1349.99, 600, true)).toBe(1200)
+    expect(__test.groundMoment(1350, 600, true)).toBe(1350)
+  })
+})
+
 // Risk in the view follows the backend's rule exactly: someone is at a level
 // when they are within that level's zone around a location the mine has. The
 // zones already carry the allowance for location error, so nothing is added

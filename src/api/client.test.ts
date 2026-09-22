@@ -68,6 +68,19 @@ describe('the API client', () => {
     )
   })
 
+  // Protected ground is what the planner decided from, as intent stood at the
+  // moment on screen — so the request carries that intent, not the run's first.
+  it('asks for the ground a run protects under the intent in force', async () => {
+    const fetchMock = stubFetch(() => respond({ at_seconds: 90, knowledge: 'estimate', ground: [] }))
+
+    await api.ground('run-1', 90, { lookahead_seconds: 300, protect: ['person', 'crewed-vehicle'], knowledge: 'estimate' })
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/runs/run-1/ground?at_seconds=90&lookahead_seconds=300&protect=person%2Ccrewed-vehicle&knowledge=estimate',
+      expect.anything(),
+    )
+  })
+
   // Two people tuning one target must not silently overwrite each other.
   it('sends the expected version when one is given', async () => {
     const fetchMock = stubFetch(() => respond({ version: 8, settings: {} }))

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ApiError, api } from '../api/client'
 import type {
   Cycle, CycleIntent, Entity, EntityKind, IntentSettings, IntentState, Point, RiskLevel, SeismicEvent,
@@ -10,11 +10,11 @@ import { count, duration, entityName, priorityLabel } from '../components/format
 import { useRunCycles } from '../state/useRunCycles'
 import { MineScene } from './MineScene'
 import {
-  RISK_LEVELS, busiestMoment, clock, cycleAt, endOf, errorMetres, positionAt, residualMeaningful, riskAt,
-  riskCounts, sceneAt, stateAt, trulyExposedAt, type EventState, type Risk,
+  RISK_LEVELS, busiestMoment, clock, cycleAt, endOf, errorMetres, groundMoment, positionAt, residualMeaningful,
+  riskAt, riskCounts, sceneAt, stateAt, trulyExposedAt, type EventState, type Risk,
 } from './MineView.internals'
 import {
-  STATE_WORDS as INTENT_WORDS, describeIntent, eventIntentAt, intentAtCycle, intentCounts, protectedPaths, reachSpheres,
+  STATE_WORDS as INTENT_WORDS, describeIntent, eventIntentAt, intentAtCycle, intentCounts, reachSpheres,
 } from './intent'
 
 /** Simulated seconds per real second. */
@@ -169,9 +169,20 @@ export function MineView() {
   const reach = useMemo(
     () => (showReach && intentNow ? reachSpheres(events, sensorsById, now) : []),
     [showReach, intentNow, events, sensorsById, now])
+  // The ground intent protected, as the backend's planner had it — asked at
+  // steps while playing, and kept on screen while the next step loads.
+  const protecting = showRoutes && intentNow !== null && intentNow.mode !== 'off'
+  const groundAt = groundMoment(now, speed, playing)
+  const ground = useQuery({
+    queryKey: ['ground', id, groundAt, intentNow?.lookahead_seconds, intentNow?.protect.join(','), intentNow?.knowledge],
+    queryFn: () => api.ground(id, groundAt, intentNow!),
+    enabled: protecting,
+    placeholderData: keepPreviousData,
+    staleTime: Infinity,
+  })
   const routes = useMemo(
-    () => (showRoutes && intentNow ? protectedPaths(entities, now, intentNow).map((p) => p.points) : []),
-    [showRoutes, intentNow, entities, now])
+    () => (protecting ? (ground.data ?? []).map((p) => p.points) : []),
+    [protecting, ground.data])
   const judgedCounts = useMemo(() => intentCounts(events, now), [events, now])
   const chosen = events.find((event) => event.sequence === selected) ?? null
 
@@ -276,7 +287,7 @@ export function MineView() {
                   </label>
                   <label className="row" htmlFor="mine-routes">
                     <input id="mine-routes" type="checkbox" checked={showRoutes} onChange={(e) => setShowRoutes(e.target.checked)} />
-                    Protected routes
+                    Protected ground
                   </label>
                 </>
               ) : null}
@@ -312,7 +323,7 @@ export function MineView() {
                   <li><i className="dot intent-kept" aria-hidden="true" />Work kept</li>
                   <li><i className="dot intent-decayed" aria-hidden="true" />Work decayed</li>
                   <li><i className="dot intent-promoted" aria-hidden="true" />Work promoted</li>
-                  {showRoutes ? <li><i className="dot route" aria-hidden="true" />Protected route ahead</li> : null}
+                  {showRoutes ? <li><i className="dot route" aria-hidden="true" />Protected ground ahead</li> : null}
                 </>
               ) : null}
               {showTruth ? <li><i className="dot ring truth" aria-hidden="true" />Really exposed</li> : null}

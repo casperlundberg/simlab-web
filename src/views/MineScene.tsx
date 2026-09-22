@@ -26,7 +26,8 @@ interface Props {
   intentStates: Map<number, IntentState>
   /** The sphere each judged event was decided with. Empty to draw none. */
   reach: Reach[]
-  /** Where each protected entity is going over the lookahead. Empty to draw none. */
+  /** The ground intent protects over the lookahead, as the backend's planner had it:
+   *  each vehicle's route, every tunnel a person could walk to. Empty to draw none. */
   routes: Point[][]
   selected: number | null
   onSelect: (sequence: number | null) => void

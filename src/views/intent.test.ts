@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import type { Cycle, Entity, IntentChange, SeismicEvent } from '../api/types'
+import type { Cycle, IntentChange, SeismicEvent } from '../api/types'
 import {
   DEFAULT_INTENT, describeIntent, eventIntentAt, intentAtCycle, intentCounts, intentDocument, intentPatch, intentSeries,
-  protectedPaths, reachSpheres, toDraft, toggled, CLASSES,
+  reachSpheres, toDraft, toggled, CLASSES,
 } from './intent'
 
 // The editor's patch is sent to a run in flight; what the mine draws as
@@ -166,25 +166,3 @@ describe('where intent decided', () => {
   })
 })
 
-describe('the ground intent protects', () => {
-  const walker: Entity = {
-    id: 'person-01', kind: 'person',
-    track: [[0, 0, 0, -500], [100, 100, 0, -500], [200, 100, 100, -500]],
-  }
-  const hauler: Entity = { id: 'autonomous-vehicle-01', kind: 'autonomous-vehicle', track: [[0, 5, 5, -500]] }
-
-  it('follows each protected entity from now to the end of the lookahead', () => {
-    const [path] = protectedPaths([walker], 50, { ...DEFAULT_INTENT, lookahead_seconds: 100 })
-    expect(path?.points).toEqual([{ x: 50, y: 0, z: -500 }, { x: 100, y: 0, z: -500 }, { x: 100, y: 50, z: -500 }])
-  })
-
-  it('is only where things are now with no lookahead', () => {
-    const [path] = protectedPaths([walker], 50, { ...DEFAULT_INTENT, lookahead_seconds: 0 })
-    expect(path?.points).toEqual([{ x: 50, y: 0, z: -500 }])
-  })
-
-  it('leaves out kinds that are not protected, and everything with intent off', () => {
-    expect(protectedPaths([walker, hauler], 0, { ...DEFAULT_INTENT, protect: ['person'] })).toHaveLength(1)
-    expect(protectedPaths([walker, hauler], 0, { ...DEFAULT_INTENT, mode: 'off' })).toHaveLength(0)
-  })
-})

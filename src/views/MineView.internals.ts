@@ -357,8 +357,23 @@ export function clock(seconds: number): string {
   return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
 }
 
+// A decision cycle, and how often playback may ask for ground: the scene
+// moves every frame, but the backend is asked at most this often.
+const DECISION_SECONDS = 15
+const GROUND_ASKS_PER_SECOND = 4
+
+/** The moment to ask for protected ground: the one on screen when paused, and
+ *  otherwise the last step of at least a decision cycle — or of however much
+ *  run a quarter of a second of playback covers — so fast playback asks a few
+ *  times a second rather than every frame. */
+export function groundMoment(now: number, speed: number, playing: boolean): number {
+  if (!playing) return now
+  const step = Math.max(DECISION_SECONDS, speed / GROUND_ASKS_PER_SECOND)
+  return Math.floor(now / step) * step
+}
+
 export const __test = {
   SCENE_SIZE, toScene, stateAt, positionAt, errorMetres, sceneAt,
   scenarioSeconds, cycleAt, endOf, busiestMoment, isClick, nearestWithin, residualMeaningful, clock,
-  entityAt, riskAt, riskCounts, trulyExposedAt,
+  entityAt, riskAt, riskCounts, trulyExposedAt, groundMoment,
 }

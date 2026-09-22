@@ -3,6 +3,20 @@
 Every release, newest first. `make release` will not tag a version without a
 section here, so the tag message and this file always agree.
 
+## 3.0.0 — unreleased
+
+MAJOR: the virtual mine asks simlab-api 4.0 for the ground intent protects
+(`GET /api/runs/{id}/ground`), which earlier backends do not serve.
+
+- **Protected ground is the planner's, not recomputed here.** The mine drew
+  every protected unit's own future track, which since simlab-api 4.0 is not
+  what the planner protects for a person: it protects every tunnel they could
+  walk to, since no mine knows which way someone will go. The view now draws
+  what the backend's planner decided from, under the intent in force at the
+  moment shown — asked at the moment on screen when paused, and at steps of a
+  decision cycle or a quarter-second of playback while playing.
+- "Protected routes" is now "Protected ground".
+
 ## 2.0.0 — 2026-09-22
 
 Alongside autoscaler 2.0.0. MAJOR: a new run's form sends the settings

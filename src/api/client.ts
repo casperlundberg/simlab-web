@@ -1,6 +1,6 @@
 import { getToken, notifyTokenRejected } from './token'
 import type {
-  Cycle, Entity, IntentSettings, Layout, Metrics, Mine, PlatformSchema, Run, RunDetail, RunIntent, RunListing,
+  Cycle, Entity, Ground, IntentSettings, Layout, Metrics, Mine, PlatformSchema, Run, RunDetail, RunIntent, RunListing,
   Scenario, SeismicEvent, SettingsSnapshot, TargetSnapshot, TargetStatus, Versions,
 } from './types'
 
@@ -105,6 +105,18 @@ export const api = {
         : `/api/runs/${id}/intent?expected_version=${expectedVersion}`,
       { method: 'PATCH', body: JSON.stringify(patch) },
     ),
+
+  /** The ground a run's planner protected at a moment, from the backend's own
+   *  views — each vehicle along its route, each person along every tunnel they
+   *  could walk to — under the intent in force then. Never recomputed here:
+   *  a second copy would drift from what intent actually decided from. */
+  ground: (id: string, at: number, intent: Pick<IntentSettings, 'lookahead_seconds' | 'protect' | 'knowledge'>) =>
+    request<Ground>(`/api/runs/${id}/ground?${new URLSearchParams({
+      at_seconds: String(at),
+      lookahead_seconds: String(intent.lookahead_seconds),
+      protect: intent.protect.join(','),
+      knowledge: intent.knowledge,
+    })}`).then((r) => r.ground),
 
   /** The people and vehicles underground during a run. */
   entities: (id: string) =>
